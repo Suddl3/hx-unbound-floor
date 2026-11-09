@@ -454,25 +454,31 @@ x_w: R1 = DM(DMAC0);
 x_idle:
     R0 = DM(SAVE + 1);"""),
     SHARE_PATCHES[3],
-    # A bounded abort wait can expire while DMA is still draining. Keep the
-    # descriptors intact then; count the failure on both exit paths.
-    ("""    IF NE JUMP da_w;
+]
+# Suddl3's PR #1 (this repository's, "Wait for DMA to become idle before clearing an
+# aborted transfer"), merged 2026-11-09 after a code review; NAM_PR1=0 rebuilds the old kernel
+# (NOMASK_C3600, f4338695).
+if os.environ.get("NAM_PR1") != "0":
+    NOMASK_PATCHES += [
+        # A bounded abort wait can expire while DMA is still draining. Keep the
+        # descriptors intact then; count the failure on both exit paths.
+        ("""    IF NE JUMP da_w;
 da_ok:""", """    IF NE JUMP da_w;
     JUMP da_count;                      // still busy: defer descriptor cleanup
 da_ok:"""),
-    ("""    DM(CPEP0) = R0;
+        ("""    DM(CPEP0) = R0;
     R0 = DM(REP + R_TIMEOUTS);""", """    DM(CPEP0) = R0;
 da_count:
     R0 = DM(REP + R_TIMEOUTS);"""),
-    # Admission already proved every BUSYM bit clear. A prior abort may have
-    # left a count/chain pointer behind, so clear them only here, after idle.
-    ("""m_idle:
+        # Admission already proved every BUSYM bit clear. A prior abort may have
+        # left a count/chain pointer behind, so clear them only here, after idle.
+        ("""m_idle:
     R0 = DM(S_INIT, I6);""", """m_idle:
     R0 = 0;
     DM(ICEP0) = R0;
     DM(CPEP0) = R0;
     R0 = DM(S_INIT, I6);"""),
-]
+    ]
 
 
 # 2026-11-07 speed: the channel idles mid-layer (sim: 41.7K/call with real DMA timing, 29.0K with
@@ -480,6 +486,22 @@ da_count:
 # if channel 0 is idle, pump starts the next ready job (I0-I3, I5, L1, L2 kept in MPS; M4 = 0, R3 = 0
 # restored). 0 = off (the installed NOMASK).
 MID_PUMP = int(os.environ.get("NAM_MID_PUMP", "0"))
+
+# 2026-11-08 speed (unit profile 2: pair loops +38%, copies 2x the sim): the layer buffers LB (row + the
+# weights the pair loop reads with PM) sat in Block 3 with IN/X/HS/SB (its DM operands) and the hot code:
+# DM, PM and instruction fetch in one block. NAM_LB_B0=1 puts LB in R3 (Block 0) and moves OUTBUF and FTAB
+# to R1, LCH and SLOTTAB to R2 to make room. Same code and math (KernelCheck bit-exact).
+PLACE = {"LB": ["R3"], "SLOT0": ["R3"], "SLOT1": ["R3"], "RCH0": ["R3"], "RCH1": ["R3"],
+         "OUTBUF": ["R1"], "FTAB": ["R1", "R3"], "LCH": ["R2"], "SLOTTAB": ["R2"]} \
+    if os.environ.get("NAM_LB_B0") == "1" else {}
+# NAM_LB_B0=2 (unit: LB_B0 sped the pair loop by 3.1K but the call by only 1.6K): stallmap.py --search's
+# placement. Block 0 gets what is read beside PM data in another block or with no PM access at all (the
+# code's fetch is in Block 3): LB, HS, the flags, the far bookkeeping; Block 3 keeps X, IN, SB (read
+# beside LB's PM weights) and takes the slots and RCH chains.
+if os.environ.get("NAM_LB_B0") == "2":
+    PLACE = {**{k: ["R3"] for k in ("LB", "OUTBUF", "FTAB", "WCH0", "HS", "FLAGREP", "FCH0", "FCH1", "LCH",
+                                    "WADDR", "SLOTTAB")},
+             **{k: ["R1", "R2"] for k in ("SLOT0", "SLOT1", "RCH0", "RCH1", "SAVE", "X", "IN", "SB", "JOBS")}}
 MP_LOOP = ("""      LCNTR = 8, DO n_pair UNTIL LCE;""", """      LCNTR = MP_OUTER, DO n_mp UNTIL LCE;
       LCNTR = MP_INNER, DO n_pair UNTIL LCE;""")
 MP_END = ("""n_pair: DM(I3, M6) = F13;
@@ -802,7 +824,8 @@ class Layout(n2.Layout):
         self.nclr = C + C * len(near)
         for name, n in sorted(sizes.items(), key=lambda x: -x[1]):
             even = name.startswith("SLOT")
-            r = next((r for r in ("R1", "R3", "R2", "RX") if rg.spare()[r] >= n + 1), None)
+            order = tuple(PLACE[name]) if name in PLACE else ("R1", "R3", "R2", "RX")
+            r = next((r for r in order if rg.spare()[r] >= n + 1), None)
             if r is None:
                 raise SystemExit(f"no room for {name} ({n} words): {rg.spare()}")
             alloc[name] = rg.take(r, n, even=even)

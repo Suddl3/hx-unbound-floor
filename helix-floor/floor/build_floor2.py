@@ -31,19 +31,30 @@ def main():
     out = os.path.abspath(argv[argv.index("-o") + 1]) if "-o" in argv else \
         os.path.join(ROOT, "build", "Helix_Floor_v3.80.0_NAM2_PERSONAL.hxf")
     b = os.path.join(ROOT, "build")
+    if "--e555" in argv:                     # EXPERIMENT: ID 555 hybrid; everything stays in build/EXPERIMENT-555
+        os.environ["NAM_555"] = "1"
+        b = os.path.join(ROOT, "build", "EXPERIMENT-555")
+        v = next((a.split("=", 1)[1] for a in argv if a.startswith("--variant=")), "hybrid")   # stage_main.V555
+        os.environ["NAM_555_VARIANT"] = v
+        if "-o" not in argv:
+            out = os.path.join(b, "Helix_Floor_v3.80.0_NAM555_EXP.hxf" if v == "hybrid" else
+                               f"Helix_Floor_v3.80.0_NAM555_{v.upper()}_EXP.hxf")
+        assert os.path.dirname(out) == b, "an --e555 build must write into build/EXPERIMENT-555"
     os.makedirs(b, exist_ok=True)
     s0, s1, s2, s3, s4 = (os.path.join(b, f"floor2_{n}.l6ia") for n in ("stock", "s1", "s2", "s3", "s4"))
     bf.run(os.path.join(TOOLS, "hxf.py"), "unpack", stock, s0)
     diag = "--diag" in argv                  # the beep-code test image (nam_floor5d)
     meter = "--meter" in argv                # the cycles meter test image (nam_floor5m)
     probe = "--probe" in argv                # the tap-list DMA probe image (nam_floor5t)
+    profile = "--profile" in argv            # the where-does-the-time-go image (nam_floor5p)
+    profile2 = "--profile2" in argv          # the compute split by section (nam_floor5q)
     ch1 = "--ch1" in argv                    # weights on EP DMA channel 1 (exp_ch1_nomask: nam_floor4, no LRPTL)
-    if diag or meter or probe:
+    if diag or meter or probe or profile or profile2:
         os.environ["NAM_DIAG"] = "1"         # (no KernelCheck: the output is a code / the meter)
-        out = out.replace("NAM2_PERSONAL", "NAM2_DIAG" if diag else "NAM2_PROBE" if probe else "NAM2_METER")
+        out = out.replace("NAM2_PERSONAL", "NAM2_DIAG" if diag else "NAM2_PROBE" if probe else "NAM2_PROFILE" if profile else "NAM2_PROFILE2" if profile2 else "NAM2_METER")
         out = out.replace("NAM2_CH1", "NAM2_CH1_METER") if meter and "METER" not in out else out
     os.environ["NAM_KERNEL"], os.environ["NAM_MAX_BLOCKS"] = \
-        ("nam_floor5d" if diag else "nam_floor5t" if probe else "exp_ch1_meter" if (meter and ch1) else "nam_floor5m" if meter
+        ("nam_floor5d" if diag else "nam_floor5t" if probe else "nam_floor5p" if profile else "nam_floor5q" if profile2 else "exp_ch1_meter" if (meter and ch1) else "nam_floor5m" if meter
          else "exp_ch1_nomask" if ch1 else "nam_floor5"), "16"
     os.environ["NAM_MAX_STEADY"] = "60000"           # (bit-exact still checked; speed judged on the unit)
     bf.run(os.path.join(HERE, "stage_slots2.py"), s0, s1)
@@ -59,7 +70,8 @@ def main():
     bf.run(os.path.join(HERE, "test_ir_title.py"))
     rep = bf.report(s0, s4)
     print(rep)
-    open(os.path.join(b, "CHANGES_NAM2.txt"), "w").write(rep + "\n")
+    open(os.path.join(b, "CHANGES_NAM2.txt" if os.environ.get("NAM_555_VARIANT", "hybrid") == "hybrid" else
+                      f"CHANGES_NAM555_{os.environ['NAM_555_VARIANT'].upper()}.txt"), "w").write(rep + "\n")
     bf.run(os.path.join(HERE, "floor_hxf.py"), "pack", s4, out, "--donor", stock)
     for f in (s1, s2, s3):
         os.remove(f)

@@ -100,9 +100,16 @@ def main():
     info = pa.parse_entry3_full(e_db)
     assert len(info['models']) == N_MODELS
     clarity = pa.find_model(info, 'HD2_AmpLine6Clarity')
-    nam = pa.nam_params(e_db, info)
+    if os.environ.get("NAM_555"):                         # EXPERIMENT build/EXPERIMENT-555
+        import spec555
+        nam = spec555.nam_params(e_db, info)
+    else:
+        nam = pa.nam_params(e_db, info)
     new_gl, blob_idx, comp = add_model_entry4(e_gl, clarity['blob_index'], nam, SDRAM_WORDS)
-    new_db, model_id, lists = add_model_entry3(e_db, clarity, 'HD2_AmpNAMLite', 'NAM A2 Lite', blob_idx, nam)
+    # 555 "fx" variant: the model DB record (category distortion, its group lists) is Xenomorph's, as
+    # upstream's add-fx-model; the composite stays Clarity's copy (amp-size instance memory)
+    db_src = pa.find_model(info, 'HD2_DistXenomorphFuzzMono') if os.environ.get("NAM_555_VARIANT") == "fx" else clarity
+    new_db, model_id, lists = add_model_entry3(e_db, db_src, 'HD2_AmpNAMLite', 'NAM A2 Lite', blob_idx, nam)
     e2 = data[ents[E_E2]['payload_off']: ents[E_E2]['payload_off'] + ents[E_E2]['payload_len']]
     new_e2, rep = expand_blob0(e2)
     # checks: the new Blob 0 as the SHARC would relocate it, and the new model as parsed back

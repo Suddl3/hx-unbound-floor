@@ -312,6 +312,7 @@ def build():
 
 def tramp_bytes():
     """ldr.w pc, [pc, #0]; .word HOOK | 1 (pc base = 0x28135074, the word itself)."""
+    assert TRAMP % 4 == 0, "ldr.w pc, [pc, #0] needs a word-aligned site (else it reads the wrong literal)"
     return struct.pack("<HHI", 0xF8DF, 0xF000, CAVE | 1)
 
 

@@ -34,7 +34,7 @@ def record_asio(seconds):
     os.environ["SD_ENABLE_ASIO"] = "1"
     import sounddevice as sd
     dev = [i for i, d in enumerate(sd.query_devices()) if d["name"] == "ASIO Helix"][0]
-    x = sd.rec(int(seconds * 44100), samplerate=44100, channels=8, device=dev, dtype="float32", blocking=True)
+    x = sd.rec(int(seconds * 48000), samplerate=48000, channels=8, device=dev, dtype="float32", blocking=True)
     return x[:, :2].T
 
 
@@ -122,8 +122,57 @@ def report_v4(ch):
               f"PM guard {'ok' if s & 2 else 'FAIL'}, S_INIT {s & 1}")
 
 
+def _profile_frames(ch):
+    x = np.round(ch * 32768).astype(np.int64)
+    st = [i for i in range(len(x) - 16) if x[i] == x[i + 1] == 16384 and x[i + 2] == x[i + 3] < 0]
+    if len(st) < 10:
+        return None
+    return np.array([[x[i + 2 * k] for k in range(8)] for i in st]) * np.array([1, -1, 1, -1, 1, -1, 1, -1])
+
+
+def report_profile2(ch):
+    """nam_floor5q: fields 1..7 = total, entry->jobs, jobs->layers, layers->head, head->mix, mix->end, pair loops."""
+    f = _profile_frames(ch)
+    if f is None:
+        print("no profile signal (gain after the block must be 1)")
+        return
+    tot = np.median(f[:, 1]) * 8
+    print(f"frames {len(f)}")
+    for k, name in enumerate(["total", "setup (entry->jobs)", "jobs->layers (input)", "23 layers", "head",
+                              "mix + output", "pair loops (core math)"], 1):
+        c = np.median(f[:, k]) * 8
+        print(f"  {name:24s} median {c:8,.0f} cycles  {c / tot:6.1%} of the call  {c / BLOCK:6.1%} of the DSP")
+
+
+def report_profile(ch):
+    """nam_floor5p: v4 framing; fields 1..7 = -total, +lwait, -fwait, +head, -end, +pump (cycles/8), -polls.
+    Frames are found by their marker (field 0 = 16384, 16384) followed by a negative pair (field 1)."""
+    x = np.round(ch * 32768).astype(np.int64)
+    st = [i for i in range(len(x) - 16) if x[i] == x[i + 1] == 16384 and x[i + 2] == x[i + 3] < 0]
+    if len(st) < 10:
+        print("no profile signal (gain after the block must be 1: use a preset with nothing after NAM)")
+        return
+    f = np.array([[x[i + 2 * k] for k in range(8)] for i in st]) * np.array([1, -1, 1, -1, 1, -1, 1, -1])
+    tot = np.median(f[:, 1]) * 8
+    print(f"frames {len(f)}")
+    for k, name in ((1, "total"), (2, "lwait (layer weights)"), (3, "fwait (far taps)"), (4, "head wait"),
+                    (5, "end wait"), (6, "pump (all calls)")):
+        c = np.median(f[:, k]) * 8
+        print(f"  {name:24s} median {c:8,.0f} cycles  {c / tot:6.1%} of the call  {c / BLOCK:6.1%} of the DSP")
+    print(f"  polls                    median {np.median(f[:, 7]):8,.0f}")
+    w = sum(np.median(f[:, k]) * 8 for k in (2, 3, 4, 5))
+    print(f"  waits together           {w:8,.0f} cycles ({w / tot:.1%}); the rest (compute + pump outside waits) {tot - w:,.0f}")
+
 def main():
     argv = sys.argv[1:]
+    if "--profile2" in argv:
+        argv.remove("--profile2")
+        report_profile2(channels(argv[0] if argv else "5", "ASIO")[0])
+        return
+    if "--profile" in argv:
+        argv.remove("--profile")
+        report_profile(channels(argv[0] if argv else "5", DEVICE)[0])
+        return
     if "--v4" in argv:
         argv.remove("--v4")
         report_v4(channels(argv[0] if argv else "5", DEVICE)[0])
