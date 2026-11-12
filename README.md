@@ -4,6 +4,8 @@ Custom firmware for the **Line 6 Helix Floor (3.80.0)**, built by patching your 
 
 > **Unofficial and experimental.** Not affiliated with, endorsed by or supported by Line 6 or Yamaha Guitar Group. Installing modified firmware is at your own risk and may void your warranty. No firmware is distributed here, and a built file must never be shared. Rehearse the [recovery](helix-floor/README.md#install-and-recovery) before you install anything.
 
+> **This is the `integration/hxtra-tooling` branch:** `main` with [HXtra](https://github.com/wisemandenny/hxtra) merged in at its commit `28a93fe`, so its tooling, features and research notes can be read and ported next to the Floor code. HXtra's README is [README_HXTRA.md](README_HXTRA.md). HXtra changes tools the Floor build shares, and **the Floor build has not been run on this branch**: build firmware from `main`, not from here.
+
 ## Status (2026-11-12): day one
 
 **Nothing new has been added to the firmware yet.** The `main` branch builds exactly what [savedadodo/helix-floor-nam-lite](https://github.com/savedadodo/helix-floor-nam-lite/tree/helix-floor) builds at commit `ad69ec4`: NAM A2 Lite as an amp block on the Helix Floor, up to two blocks per DSP. That port's own README, with its status, limits and findings, is kept as [README_FLOOR_NAM.md](README_FLOOR_NAM.md). Build, install and recovery are in [helix-floor/README.md](helix-floor/README.md).

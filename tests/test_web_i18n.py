@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.nam   # upstream NAM A2 Lite: skipped unless -m names nam (conftest.py)
+
 PAGE = (Path(__file__).resolve().parent.parent / "web/index.html").read_text()
 
 
@@ -41,14 +43,16 @@ class _Keys(HTMLParser):
 
 def english():
     p = _Keys()
-    p.feed(PAGE[PAGE.index("<body>"):PAGE.index("<script")])
+    body = PAGE.index("<body>")
+    p.feed(PAGE[body:PAGE.index("<script", body)])
     en = dict(p.out)
     en.update(json.loads(PAGE.split("var EN = ")[1].split("};")[0] + "}"))
     return en
 
 
 EN = english()
-LANGS = json.loads(PAGE.split("// LANGS-BEGIN\nvar LANGS = ")[1].split(";\n// LANGS-END")[0])
+LANGS_TEXT = PAGE.split("// LANGS-BEGIN\nvar LANGS = ")[1].split(";\n// LANGS-END")[0]
+LANGS = json.loads(LANGS_TEXT)
 NAMES = re.findall(r"(\w+): \"", PAGE.split("var LANG_NAMES = {")[1].split("};")[0])
 
 
@@ -58,6 +62,12 @@ def tags(s):
 
 def placeholders(s):
     return sorted(re.findall(r"\{\w+\}", s))
+
+
+def test_translations_have_one_string_a_line():
+    """So PRs editing different strings don't conflict: LANGS as json.dumps(LANGS, ensure_ascii=False, indent=2) writes it."""
+    assert LANGS_TEXT == json.dumps(LANGS, ensure_ascii=False, indent=2), \
+        "LANGS is not one string a line: rewrite it with json.dumps(LANGS, ensure_ascii=False, indent=2)"
 
 
 def test_menu_lists_every_language():

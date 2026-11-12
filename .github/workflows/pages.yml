@@ -1,12 +1,16 @@
 name: pages
 
-# Publishes the setup page (web/) with the Python tools the in-browser build
-# runs (tools/), in the repository's own layout: the page is at /web/.
-# HX Unbound Floor: manual only for now. This repository has no setup page of
-# its own yet; the Floor port's is at
+# Publishes the setup page (web/) for a release, with the files the in-browser build reads (build.py, tools/, src/m4/,
+# src/sharc/: tests/test_web_build.py checks they cover web/firmware-worker.js's SOURCES) in the repository's own layout, and the release's m4cache.json (tools/release.py attaches it) at the root: the page is at /web/.
+# Only a release publishes it, so the page always matches a release, not whatever is on main.
+# HX Unbound Floor: manual only for now. This repository has no setup page of its own yet; the Floor port's is at
 # https://savedadodo.github.io/helix-floor-nam-lite/floor-web/
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: The release to publish again
+        required: true
 
 permissions:
   contents: read
@@ -23,14 +27,21 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}web/
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
       - name: site
         run: |
-          mkdir -p _site
-          cp -r web tools LICENSE NOTICE _site/
+          mkdir -p _site/src
+          cp -r web tools build.py LICENSE NOTICE _site/
+          cp -r src/m4 src/sharc _site/src/
           find _site -name __pycache__ -prune -exec rm -rf {} +
-          printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=web/"><title>NAM A2 Lite Setup</title><a href="web/">NAM A2 Lite Setup</a>\n' > _site/index.html
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p m4cache.json -D _site
+          printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=web/"><title>HXtra Setup</title><a href="web/">HXtra Setup</a>\n' > _site/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

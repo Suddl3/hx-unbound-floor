@@ -1,6 +1,6 @@
 # Running a build from RAM
 
-You can try a built `.hxf` on the Stomp without installing it. The firmware runs from the Stomp's SDRAM for one session, and nothing is written to the eMMC. Turn the Stomp off and on and it starts whatever is installed, as before.
+You can try a built `.hxf` on an HX Stomp or HX Stomp XL without installing it (not on the HX Effects). The firmware runs from the Stomp's SDRAM for one session, and nothing is written to the eMMC. Turn the Stomp off and on and it starts whatever is installed, as before.
 
 **Status:** both ways have run NAM A2 Lite on a real HX Stomp: the command line (`tools/hxf_ram.py`, the loader and the hook) and the browser version on the setup page (`web/ramrun.js`, the same steps over WebUSB). The browser version has also run the XL build on a real HX Stomp XL; the command line hasn't been tried on an XL.
 
@@ -20,12 +20,12 @@ On Windows the browser may not see the Stomp, because Line 6's driver holds it. 
 
 ```sh
 pip install pyusb                    # and libusb
-# Hold Page Right while you turn the Stomp on (update mode, dark screen), then:
+python3 tools/hxf_ram.py dfu         # restarts the HX Stomp in update mode (or hold Page Right at power-up)
 dfu-util -d 1fc9:000c -a 0 -D tools/ramboot/firmware-ramboot.dfu
-python3 tools/hxf_ram.py run build/HX_Stomp_v3.80.0_NAM_A2_Lite.hxf --stock HX_Stomp_v3.80.0_0x103966115.hxf
+python3 tools/hxf_ram.py run build/HX_Stomp_v3.80.0_HXtra.hxf --stock HX_Stomp_v3.80.0_0x103966115.hxf
 ```
 
-dfu-util may report an I/O error at the end: the loader has started and left update mode. `hxf_ram.py plan` makes the same checks and layout without a unit (`--out DIR` writes what would be sent), and `hxf_ram.py info` shows what the loader reports.
+dfu-util may report an I/O error at the end: the loader has started and left update mode. `hxf_ram.py plan` makes the same checks and layout without a unit (`--out DIR` writes what would be sent), and `hxf_ram.py info` shows what the loader reports. `hxf_ram.py dfu` sends the same update-mode request as the setup page (step 1 below); it needs HX Edit and Line 6 Updater closed, and the installed firmware running.
 
 ## What to expect
 
@@ -36,7 +36,7 @@ dfu-util may report an I/O error at the end: the loader has started and left upd
 
 ## How it works
 
-1. **Update mode.** The page asks the running Stomp to restart in update mode, the same way Line 6 Updater does. It opens a message stream to port 0xEF on vendor interface 0 and sends update command 2. The Stomp then leaves `BootIntoDfu!` in RAM and resets, and its bootloader starts the boot ROM's DFU loader. Holding Page Right at power-up skips this step.
+1. **Update mode.** The page (or `hxf_ram.py dfu`) asks the running Stomp to restart in update mode, the same way Line 6 Updater does. It opens a message stream to port 0xEF on vendor interface 0 and sends update command 2. The Stomp then leaves `BootIntoDfu!` in RAM and resets, and its bootloader starts the boot ROM's DFU loader. Holding Page Right at power-up skips this step.
 2. **The RAM loader** (`src/ramboot/ramboot.c`, a 4 KB image) is sent to the boot ROM over DFU. It sets the clocks the way the stock bootloader does (PLL1 at 204 MHz), then starts the SDRAM (EMC at 102 MHz) and the eMMC, read only. The image contains no eMMC write. Vendor requests on the control pipe (`src/ramboot/ramboot.h`) write SDRAM 4 KB at a time and return CRC-32s of SDRAM and of eMMC sectors. `GO` starts the application.
 3. **The application** (entry 0 of the build) is checked as the bootloader checks it: magic, size, CRC-32, flags and segment ranges. Segments for SDRAM go straight to their addresses. Segments for internal SRAM are staged in SDRAM and copied by a small routine at 0x10090000 just before the jump, because the loader itself runs in SRAM. The routine fills the parameter block as the bootloader does and jumps with interrupts off.
 4. **The overlay.** Each of the other entries is compared with the stock `.hxf`, 512 bytes at a time, at its sectors on the eMMC. Every sector that differs, and every sector past the end of the stock entry, goes into a table in SDRAM. The application reaches the eMMC only through two functions, `read_blocks` and `write_blocks`. `hxf_ram.py` overwrites the first 8 bytes of each with a jump to `src/ramboot/ramboot_hook.c`. The hook serves overlay sectors from SDRAM and passes every other sector to the original function. For NAM A2 Lite the overlay is about 4,250 sectors of entries 2, 3 and 4, and the whole upload is about 3 MB.
