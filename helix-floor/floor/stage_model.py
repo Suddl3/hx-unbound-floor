@@ -70,8 +70,87 @@ def nam_host_member(b0, comp_id, sdram_words=0):
 
 
 pa.nam_host_member = nam_host_member
+
+# EXPERIMENT (NAM_GR_METER=1, 2026-11-11): the NAM block gets a gain-reduction meter (the one the Floor
+# draws at the bottom right of the main screen for compressors and gates). Every stock model with one has,
+# in its parameter map, a node op 2 (data [1, path to the primitive, 1]: read its value 1) -> op 0x28 ->
+# op 0xf (data [1]: meter 1), and Entry 3 meta gainReductionMeterCount '1'. The kernel then has to put the
+# value where op 2 reads it (nam_floor5 NAM_GR_TEST: a ramp into DM(1) of the instance, a first guess).
+GR_METER = os.environ.get("NAM_GR_METER") == "1"
+
+
+def nam_host_blob_gr(comp_id, params):
+    """pa.nam_host_blob plus the meter chain (nodes 2n, 2n+1, 2n+2), counts and sizes as the stock
+    Hard Gate's: H12 = 5n + 9 state words, H14 = H15 = 3n + 2, nC = n + 2."""
+    n = len(params)
+    na = 2 * n + 3
+    a_off = 0x18
+    data_off = a_off + 10 * na
+    c_off = data_off + 3 * n + 4
+    nc = n + 2
+    d_off = c_off + 4 * nc
+    e_off = d_off + 4 * n
+    end = e_off + 4 * n
+    pm = [a_off, 0, c_off, 0, c_off, 0, d_off, 0, e_off, 0, end, 0]
+    pm += [5 * n + 9, na, 3 * n + 2, 3 * n + 2, n, n]
+    pm += [na, 0, nc, n, n, 0]
+    for k, p in enumerate(params):                  # inputs, nodes 0 .. n-1
+        pm += [data_off, 0, k, p['op'], 1, 2, 0, 0, 1, 0]
+    for k in range(n):                              # writers, nodes n .. 2n-1
+        pm += [data_off + 3 * k, 0, n + k, 1, 0, 3, 3, 3, 0, 0]
+    pm += [data_off + 3 * n, 0, 2 * n, 2, 1, 4, 3, 3, 0, 0]          # read value 1 of the primitive
+    pm += [data_off + 3 * n + 3, 0, 2 * n + 1, 0x28, 1, 2, 0, 0, 0, 0]
+    pm += [data_off + 3 * n + 3, 0, 2 * n + 2, 0x0f, 0, 3, 1, 1, 0, 0]  # meter 1
+    for p in params:
+        pm += [0x0e, p['pid'], 1]
+    pm += [1, 0x0e, 1, 1]                           # op 2's data, then op 0xf's
+    for k in range(n):                              # C: input k -> writer k, then the meter chain
+        pm += [k, n + k, 0, 0]
+    pm += [2 * n, 2 * n + 1, 0, 0, 2 * n + 1, 2 * n + 2, 0, 0]
+    for k, p in sorted(enumerate(params), key=lambda kp: kp[1]['slot']):
+        pm += [k, k, p['slot'], 0]
+    for k in range(n):
+        pm += [k, k, k, 0]
+    assert len(pm) == end
+
+    v0 = 0x10
+    tree = v0 + 2 * 2 * n
+    pmo = tree + 4
+    pin = pmo + len(pm)
+    ini = pin + 4 * 2 * n
+    sub = ini + 2 * (3 * n + 1)
+    b = [3, 2, tree, 1, ini, 3 * n + 1, pmo, len(pm), sub, 0, pin, 2 * n]
+    b += [1, 0, 1, 2]                               # paths [0] (the root) and [2] (member 1)
+    for p in params + params:
+        b += [1, p['default_word']]
+    b += [0, comp_id, 0, 0]
+    b += pm
+    for k, p in enumerate(params):
+        b += [0x0c, p['slot'], v0 + 2 * k, 1]
+    for k, p in enumerate(params):
+        b += [0x0e, p['pid'], v0 + 2 * (n + k), 2]
+    for k in range(n):
+        b += [1, pmo + data_off + 3 * k]
+    b += [1, pmo + data_off + 3 * n + 1]            # op 2's path word
+    for k in range(2 * n):
+        b += [1, pin + 4 * k]
+    assert len(b) == sub
+    return b
+
+
+if GR_METER:
+    pa.nam_host_blob = nam_host_blob_gr
 add_model_entry3 = _floor_copy(pa.add_model_entry3)
 add_model_entry4 = _floor_copy(pa.add_model_entry4)
+if GR_METER:                                    # + meta gainReductionMeterCount '1' (a string record, as stock)
+    _src = inspect.getsource(pa.add_model_entry3).replace("864", str(N_MODELS))
+    _a = "    # one state per parameter map input node"
+    assert _src.count(_a) == 1
+    _src = _src.replace(_a, "    meta += struct.pack('<3I', string('gainReductionMeterCount'), 7, string('1'))\n"
+                            "    d[0] = len(meta) // 12\n" + _a)
+    _ns = {}
+    exec(compile(_src, "<floor add_model_entry3 + GR meter>", "exec"), pa.__dict__, _ns)
+    add_model_entry3 = _ns["add_model_entry3"]
 
 
 def expand_blob0(e2_raw):

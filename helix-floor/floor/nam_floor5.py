@@ -267,6 +267,22 @@ def kernel_src():
         for a, b in (G_TAP, G_GO) + ((G_W,) if GATHER_W else ()):
             assert src.count(a) == 1, a[:70]
             src = src.replace(a, b)
+    if NOSENT:
+        for a, b in NS_PATCHES:
+            assert src.count(a) == 1, a[:70]
+            src = src.replace(a, b)
+    if PAIR:
+        src = pair_src(src)
+    if LINK:
+        src = link_src(src)
+    if os.environ.get("NAM_GR_TEST") == "1":     # (stage_model NAM_GR_METER: where does the meter read?)
+        a = "n_back:\n"
+        assert src.count(a) == 1
+        src = src.replace(a, a + GR_TEST)
+    if LB3:
+        for a, b in LB3_PATCHES:
+            assert src.count(a) == 1, a[:70]
+            src = src.replace(a, b)
     if MID_PUMP:
         for a, b in (MP_LOOP, MP_END):
             assert src.count(a) == 1, a[:70]
@@ -682,11 +698,392 @@ p_w:""", """    R1 = MAGIC;
 p_w:""")
 
 
+# NO SENTINELS (NAM_NOSENT=1, 2026-11-11): channel 0's jobs end without a sentinel TCB (each TCB
+# costs ~56 cycles of channel time on the unit, 38 sentinels a call). pump sees a chain's end in
+# DMAC0's status (DMAS | CHS | EXTS clear: the calibration probe's test, which worked on the unit)
+# and writes the job's flag itself, so lwait and the head's waits are unchanged. Also frees 30 words.
+NOSENT = os.environ.get("NAM_NOSENT") == "1"
+NS_PATCHES = [
+    ("""    R1 = DM(0, I5);
+    R0 = DM(J_CHKVAL);
+    COMP(R0, R1);
+    IF NE RTS;
+""", """    R1 = DM(DMAC0);                     // the chain still running?
+    R0 = DONEM;
+    R1 = R1 AND R0;
+    IF NE RTS;
+    R0 = DM(J_CHKVAL);                  // done: the job's flag
+    DM(0, I5) = R0;
+"""),
+    ("""    R1 = DM(G_SDR);                     // the sentinel TCB: MAGIC from SENT into the flag
+    R2 = SENT_OFF;
+    R1 = R1 + R2;
+    DM(0, I0) = R1;
+    I0 = DM(J_FLAG, I5);
+""", """    I0 = DM(J_FLAG, I5);
+"""),
+    ("""p_wl: DM(I0, 6) = R1;
+    R1 = DM(G_SDR);
+    R2 = SENT2_OFF;
+    R1 = R1 + R2;
+    DM(0, I0) = R1;
+    DM(J_CHKADR) = R1;
+    R1 = I6;
+    R2 = S_SEQ;
+    R1 = R1 + R2;
+    DM(3, I0) = R1;                     // (TCB_II - TCB_EI)
+    R1 = DM(S_SEQ, I6);
+    R1 = R1 + 1;
+    DM(S_SEQ, I6) = R1;
+    DM(J_CHKVAL) = R1;
+""", """p_wl: DM(I0, 6) = R1;
+    R1 = WBFLAG;                        // (a flag nothing waits on)
+    DM(J_CHKADR) = R1;
+    R1 = MAGIC;
+    DM(J_CHKVAL) = R1;
+"""),
+    ("""    R1 = DM(G_SDR);                     // TCB 2, the sentinel: MAGIC from SENT into the flag
+    R2 = SENT_OFF;
+    R1 = R1 + R2;
+    DM(TCB_EI + 12, I0) = R1;
+""", ""),
+]
+assert not (NOSENT and (GATHER or WB == "sb"))
+
+
+# PAIR RINGS (NAM_PAIR=1, needs NAM_NOSENT=1; 2026-11-11): each far layer's SDRAM ring holds sample
+# PAIRS, channels interleaved: [x0c0 x1c0 x0c1 x1c1 x0c2 x1c2] per pair (6 words), so a tap window (16
+# samples, 3 channels) is ONE 48-word run: a taps job is 5 TCBs, not 15 (on the unit each TCB costs
+# ~56 cycles of channel time, about the same as 28 words). The dilations are odd, so half the windows
+# start on an odd sample: ring B holds the same samples paired (odd, even), ring A (even, odd); a window
+# reads whichever ring has it pair-aligned. SB keeps the pair order (tap t at SB + 48 t, the newest at
+# SB + 240), so the pair loop reads channel c at +2c, a sample pair at +6 (row field T_P), a tap at +48.
+# Write-back per far layer (its own job, after its fcopy, before R j+2 refills its SB): A's block from
+# SB + 240, B's block (pairs x1 x2 .. x15 x16, the last word a placeholder) from OUTBUF[j % 2], and B's
+# pair before the block (its second words: x0, step 2), all three TCBs' addresses written by fcopy.
+PAIR = os.environ.get("NAM_PAIR") == "1"
+# THREE LAYER BUFFERS (NAM_LB3=1, needs NAM_PAIR=1; 2026-11-11): layer i's row + weights into LB[i % 3],
+# fetched once layer i - 3 is done (two layers of lead, not one); each row's T_NXB holds the next
+# layer's buffer. The head's weights go to LB[NL % 3] = LB2 after layer NL - 3.
+LB3 = os.environ.get("NAM_LB3") == "1"
+# LINKED FETCHES (NAM_LINK=1, needs NAM_PAIR=1; 2026-11-11): when pump starts a layer's row + weights
+# and the next job is a far layer's taps that may start too, the taps' TCBs are chained after the
+# weights' (both external -> internal): no channel idle until the next pump call (~600 cycles inside
+# far-layer groups, where the channel is the limit). pump then marks both done (J_CHK2, 2 in J_DONE).
+LINK = os.environ.get("NAM_LINK") == "1"
+# GR METER TEST (NAM_GR_TEST=1, 2026-11-11, with stage_model NAM_GR_METER=1): every call writes a ramp
+# 0 .. 1 (8,192 calls, ~2.7 s) as a float into DM(1) of the instance, the counter in DM(2): a first guess at
+# the word the meter's read (op 2, "value 1") returns. The block's sound is unchanged.
+GR_TEST = """    R0 = DM(2, I0);                     // (GR meter test) a ramp 0 .. 1 into DM(1)
+    R0 = R0 + 1;
+    R1 = 0x1FFF;
+    R0 = R0 AND R1;
+    DM(2, I0) = R0;
+    F0 = FLOAT R0;
+    F1 = 1.220703125e-04;
+    F0 = F0 * F1;
+    DM(1, I0) = F0;
+"""
+assert not LINK or PAIR
+LINK_R = ("""    // a far layer's taps: TCB 3t + c reads tap t (oldest first) of channel c
+    I3 = DM(J_ROW, I5);""", """    // a far layer's taps
+    CALL p_rset;
+    DM(J_CHKADR) = R1;
+    R1 = MAGIC;
+    DM(J_CHKVAL) = R1;
+    R0 = 0;
+    DM(J_CHK2) = R0;                    // (not linked)
+    JUMP p_go;                          // external -> internal
+p_rset:                                 // a taps job's TCB addresses (I5: its entry); R1: its flag
+    I3 = DM(J_ROW, I5);""")
+LINK_R2 = ("""p_rl: IF GE R2 = R2 - R10;
+    I0 = DM(J_FLAG, I5);
+    R1 = 0;
+    DM(0, I0) = R1;
+    R1 = I0;
+    DM(J_CHKADR) = R1;
+    R1 = MAGIC;
+    DM(J_CHKVAL) = R1;
+    R0 = 0;                             // external -> internal
+    JUMP p_go;
+""", """p_rl: IF GE R2 = R2 - R10;
+    I0 = DM(J_FLAG, I5);
+    R1 = 0;
+    DM(0, I0) = R1;
+    R1 = I0;
+    RTS;
+""")
+LINK_F = ("""    I0 = DM(J_FLAG, I5);
+    R1 = 0;
+    DM(0, I0) = R1;
+    R1 = I0;
+    DM(J_CHKADR) = R1;
+    R1 = MAGIC;
+    DM(J_CHKVAL) = R1;
+    R0 = 0;                             // external -> internal
+    JUMP p_go;
+""", """    I0 = DM(J_FLAG, I5);
+    R1 = 0;
+    DM(0, I0) = R1;
+    R1 = I0;
+    DM(J_CHKADR) = R1;
+    R1 = MAGIC;
+    DM(J_CHKVAL) = R1;
+    R0 = 0;                             // (link) no second job, unless the next is taps that may start
+    DM(J_CHK2) = R0;
+    I0 = DM(J_CHAIN, I5);
+    DM(6, I0) = R0;                     // the weights TCB's CP: end of chain
+    R1 = I5;
+    DM(J_TMP) = R1;
+    R0 = DM(J_NEXT);
+    R1 = NJOBS;
+    COMP(R0, R1);
+    IF GE JUMP p_fgo;
+    R1 = LSHIFT R0 BY 3;
+    R2 = JOBS;
+    R1 = R1 + R2;
+    I5 = R1;
+    R2 = DM(J_TYPE, I5);
+    R2 = PASS R2;
+    IF NE JUMP p_fgo;
+    R3 = DM(EVENTS);
+    R2 = DM(J_READY, I5);
+    COMP(R3, R2);
+    IF LT JUMP p_fgo;
+    R0 = R0 + 1;
+    DM(J_NEXT) = R0;
+    R1 = DM(J_CP, I5);
+    DM(6, I0) = R1;                     // chained: the taps after the weights
+    CALL p_rset;
+    DM(J_CHK2) = R1;
+p_fgo:
+    I5 = DM(J_TMP);
+    R0 = 0;                             // external -> internal
+    JUMP p_go;
+""")
+LINK_DONE = ("""    R0 = DM(J_CHKVAL);                  // done: the job's flag
+    DM(0, I5) = R0;
+    R0 = 0;
+    DM(J_BUSY) = R0;
+    R0 = DM(J_DONE);
+    R0 = R0 + 1;
+    DM(J_DONE) = R0;
+""", """    R0 = DM(J_CHKVAL);                  // done: the job's flag
+    DM(0, I5) = R0;
+    R0 = 0;
+    DM(J_BUSY) = R0;
+    R0 = DM(J_DONE);
+    R0 = R0 + 1;
+    R1 = DM(J_CHK2);                    // (link) a chained second job: its flag, and done too
+    R1 = PASS R1;
+    IF EQ JUMP p_d1;
+    I5 = R1;
+    R1 = MAGIC;
+    DM(0, I5) = R1;
+    R0 = R0 + 1;
+p_d1: DM(J_DONE) = R0;
+""")
+
+
+LINK_W = ("""    R0 = TRAN;                          // internal -> external
+p_go:""", """    R0 = 0;
+    DM(J_CHK2) = R0;                    // (not linked)
+    R0 = TRAN;                          // internal -> external
+p_go:""")
+
+
+def link_src(src):
+    for a, b in (LINK_R2, LINK_R, LINK_F, LINK_DONE, LINK_W):
+        assert src.count(a) == 1, a[:70]
+        src = src.replace(a, b)
+    return src
+assert not LB3 or PAIR
+if LB3:                                 # (LB grows by a buffer: the small chains may leave Block 0)
+    for _k in ("FCH0", "FCH1", "FCH2", "WCH0", "WCH1", "LCH", "SLOTTAB"):
+        PLACE[_k] = ["R3", "R2", "R1"]
+NLB = 3 if LB3 else 2
+LB3_PATCHES = [
+    ("""      R0 = LBSUM;
+      R1 = I4;
+      R0 = R0 - R1;
+n_layer: I4 = R0;""", """      R0 = DM(T_NXB, I4);               // (3 buffers) the next layer's
+n_layer: I4 = R0;"""),
+    ("""    DM(LBF1) = R0;
+""", """    DM(LBF1) = R0;
+    DM(LBF2) = R0;
+"""),
+]
+assert not PAIR or NOSENT
+T_P = 17                                # a row field: a sample pair's step in the layer's ring
+PAIR_DDR = ("""      I0 = R3;
+      R1 = 96;
+      R3 = R3 + R1;
+      I1 = R3;""", """      I0 = R3;
+      R1 = 2;                           // (pair rings) channel c at +2c
+      R3 = R3 + R1;
+      I1 = R3;""")
+PAIR_WFAR = ("""      M0 = R0;
+      R1 = 2;
+      R1 = R1 - R0;""", """      M0 = R0;
+      R1 = DM(T_P, I4);                 // (pair rings: 6 in a far layer's SB, 2 in a near ring)
+      R1 = R1 - R0;""")
+PAIR_RL = ("""    R6 = DM(T_STRIDE, I3);
+    LCNTR = KM1, DO p_rl UNTIL LCE;
+      R1 = R8 + R2;
+      R1 = R1 + R6, DM(I0, 6) = R1;     // (each store with the next channel's address)
+      R1 = R1 + R6, DM(I0, 6) = R1;
+      R2 = R2 + R3, DM(I0, 6) = R1;
+      COMP(R2, R10);""", """    R6 = DM(T_STRIDE, I3);
+    R1 = -3;                            // (pair rings) an odd start: ring B, the pair from start - 1
+    R6 = R6 + R1;
+    LCNTR = KM1, DO p_rl UNTIL LCE;     // one TCB a tap: 16 samples x 3 channels from one run
+      R1 = R2 + R2;
+      R1 = R1 + R2;
+      R1 = R1 + R8;
+      BTST R2 BY 0;
+      IF NOT SZ R1 = R1 + R6;
+      R2 = R2 + R3, DM(I0, 6) = R1;
+      COMP(R2, R10);""")
+PAIR_W = """p_w:
+    // (pair rings) a far layer's write-back: its chain's addresses were written by its fcopy
+    R1 = WBFLAG;                        // (a flag nothing waits on)
+    DM(J_CHKADR) = R1;
+    R1 = MAGIC;
+    DM(J_CHKVAL) = R1;
+    R0 = TRAN;                          // internal -> external
+p_go:
+"""
+PAIR_FC = """fcopy:
+    R3 = DM(T_SB, I4);
+    R1 = 240;                           // (pair rings) the newest tap: pairs (x0 x1) .. (x14 x15)
+    R3 = R3 + R1;
+    I0 = R3;
+    I8 = DM(T_OB, I4);                  // ring B's block: pairs (x1 x2) .. (x15 x16), through PM
+    I12 = X;                            // X read through PM: X shares Block 2 with this code
+    M1 = 6;                             // (M1, M8: set again by the layer after this)
+    M8 = 6;
+    BIT SET MODE1 PEYEN;                // two words a move (M10 = 2)
+    NOP;
+    LCNTR = 3, DO fc_c UNTIL LCE;
+      LCNTR = 8, DO fc_l UNTIL LCE;
+        F1 = PM(1, I12);
+        F0 = PM(I12, M10);
+fc_l:   DM(I0, M1) = F0, PM(I8, M8) = F1;
+      MODIFY(I0, -46);
+      MODIFY(I8, -46);
+fc_c: NOP;
+    BIT CLR MODE1 PEYEN;
+    NOP;
+    M4 = DM(T_LW, I4);                  // where the write-back goes: w (samples)
+    R2 = DM(M4, I6);
+    I5 = DM(T_WA, I4);                  // this layer's write-back chain: A, B, B's pair before
+    R8 = DM(G_SDR);
+    R1 = DM(T_RB, I4);
+    R8 = R8 + R1;                       // ring A (ring B at + T_STRIDE)
+    R6 = DM(T_STRIDE, I4);
+    R1 = R2 + R2;
+    R1 = R1 + R2;
+    R0 = R8 + R1;                       // + 3 w: the block's first pair
+    DM(TCB_EI, I5) = R0;
+    R0 = R0 + R6;
+    DM(TCB_EI + 6, I5) = R0;
+    R1 = DM(T_L, I4);
+    R3 = R1 + R1;
+    R3 = R3 + R1;                       // 3 L: a ring's words before its mirror
+    R1 = -5;                            // B's pair before the block: its second words
+    R0 = R0 + R1;
+    R2 = PASS R2;
+    IF NE JUMP fc_nm0;
+    R0 = R0 + R3;                       // (w = 0: the ring's last pair)
+    DM(TCB_EI + 12, I5) = R0;
+    R1 = R8 + R3;                       // the mirror: A's and B's first 8 pairs again after each ring
+    I0 = R1;
+    R1 = R1 + R6;
+    I1 = R1;
+    R1 = DM(T_SB, I4);
+    R3 = 240;
+    R1 = R1 + R3;
+    I3 = R1;
+    I2 = DM(T_OB, I4);
+    LCNTR = 48, DO fc_mw UNTIL LCE;
+      F0 = DM(I3, 1);
+      DM(I0, 1) = F0;
+      F0 = DM(I2, 1);
+fc_mw: DM(I1, 1) = F0;
+    JUMP fc_nomir;
+fc_nm0: DM(TCB_EI + 12, I5) = R0;
+fc_nomir:
+"""
+PAIR_FP = ("""      I0 = R3;
+      LCNTR = R2, DO fp_0 UNTIL LCE;
+fp_0:   DM(I0, 1) = F8;
+      R6 = 96;
+      R6 = R6 + R3;
+      I0 = R6;
+      LCNTR = R2, DO fp_1 UNTIL LCE;
+fp_1:   DM(I0, 1) = F9;
+      R6 = 192;
+      R6 = R6 + R3;
+      I0 = R6;
+      LCNTR = R2, DO fp_2 UNTIL LCE;
+fp_2:   DM(I0, 1) = F10;
+fp_skip:
+      R6 = 16;""", """      R6 = R2 + 1;                      // (pair rings) the even samples, then the odd
+      R6 = LSHIFT R6 BY -1;
+      I0 = R3;
+      LCNTR = R6, DO fp_0 UNTIL LCE;
+        DM(2, I0) = F9;
+        DM(4, I0) = F10;
+fp_0:   DM(I0, 6) = F8;
+      R6 = LSHIFT R2 BY -1;
+      R6 = PASS R6;
+      IF EQ JUMP fp_skip;
+      I0 = R3;
+      MODIFY(I0, 1);
+      LCNTR = R6, DO fp_1 UNTIL LCE;
+        DM(2, I0) = F9;
+        DM(4, I0) = F10;
+fp_1:   DM(I0, 6) = F8;
+fp_skip:
+      R6 = 48;""")
+
+
+def pair_src(src):
+    for a, b in (PAIR_DDR, PAIR_WFAR, PAIR_RL, PAIR_FP):
+        assert src.count(a) == 1, a[:70]
+        src = src.replace(a, b)
+    for a, z, b in (("p_w:\n", "p_go:\n", PAIR_W), ("fcopy:\n", "fc_nomir:\n", PAIR_FC)):
+        assert src.count(a) == 1 and src.count(z) == 1
+        i = src.index(a)
+        src = src[:i] + b + src[src.index(z, i) + len(z):]
+    return src
+
+
+def queue_pair(far):
+    """queue5 with one write-back per far layer (W j after its fcopy, before R j+2 refills its SB)."""
+    ev, done, fc = 0, {}, {}
+    for i in range(NL):
+        if i in far:
+            ev += 1
+            fc[i] = ev
+        ev += 1
+        done[i] = ev
+    jobs = {("F", i): [0 if i < NLB else done[i - NLB], (i, 0)] for i in range(NL + 1)}
+    for j, i in enumerate(far):
+        jobs[("R", j)] = [0 if j < 2 else done[far[j - 2]], (i, 1)]
+        jobs[("W", j)] = [fc[i], (i, 0.5)]
+    out = sorted(((t, n, k, j) for (k, j), (t, n) in jobs.items()), key=lambda x: (x[0], x[1]))
+    pos = {(k, j): q for q, (_, _, k, j) in enumerate(out)}
+    for j in range(len(far) - 2):
+        assert pos[("W", j)] < pos[("R", j + 2)]
+    return out
+
+
 def names():
     return nf.names() + ["HFLAG", "HDR_RECH", "T_NXN", "T_NXO", "T_NXB", "T_NXR", "W_OFF", "HDR", "SIL_N",
                          "N_WEIGHTS", "LBROW0", "LBSUM", "LBF0", "LBF1", "DIAG", "DCNT", "DCAUSE", "FT_SIZE",
                          "S_PMB", "INST_DM_SPAN", "INST_PM_SPAN"] + \
-        (["MSKD"] if P9_SHARE and P9_MODE != "nomask" else []) + (["MPS", "MP_INNER", "MP_OUTER"] if MID_PUMP else []) +         (["TLEN", "GTCB"] if GATHER else [])
+        (["MSKD"] if P9_SHARE and P9_MODE != "nomask" else []) + (["MPS", "MP_INNER", "MP_OUTER"] if MID_PUMP else []) +         (["TLEN", "GTCB"] if GATHER else []) + (["DONEM", "WBFLAG"] if NOSENT else []) + (["T_P"] if PAIR else []) + (["LBF2"] if LB3 else []) + (["J_CHK2", "J_TMP"] if LINK else [])
 
 
 def equs(v):
@@ -765,7 +1162,9 @@ class Layout(n2.Layout):
                     self.groups.append([j])
             self.gmax = max(len(g) for g in self.groups)
         assert WB == "group"
-        self.jobs = queue5(self.far, self.groups)
+        if PAIR:                         # (one write-back per far layer, from its own SB and OUTBUF half)
+            self.groups, self.gmax = [[j] for j in range(F)], 1
+        self.jobs = queue_pair(self.far) if PAIR else queue5(self.far, self.groups)
         self.queue = [(k, j) for _, _, k, j in self.jobs]
         self.ring = [(k - 1) * d + 16 for k, d in zip(KERNEL, DILATION)]
         self.nring = [L + (L & 1) for L in self.ring]
@@ -811,16 +1210,19 @@ class Layout(n2.Layout):
         alloc = {}
         nj = len(self.queue)
         self.lbw = 1 + T_SIZE3 + LB_N                    # a layer buffer: flag, row, weights
-        sizes = dict(FLAGREP=32, SAVE=64, SLOTTAB=slots, IN=16, X=48, HS=48, LB=2 * self.lbw, SB=2 * nm.SB_WORDS,
-                     **({} if WB == "sb" else {"OUTBUF": 48 * max(len(g) for g in self.groups)}), RCH0=(2 * GTCB + 19) if GATHER else 16 * nm.TCB, RCH1=(2 * GTCB + 19) if GATHER else 16 * nm.TCB, LCH=2 * nm.TCB, JOBS=nj * nm.JOB,
-                     FTAB=F * FT_SIZE, WADDR=F, FCH0=3 * nm.TCB, FCH1=3 * nm.TCB,
+        sizes = dict(FLAGREP=32, SAVE=64, SLOTTAB=slots, IN=16, X=48, HS=48, LB=NLB * self.lbw, SB=2 * nm.SB_WORDS,
+                     **({} if WB == "sb" else {"OUTBUF": 96 if PAIR else 48 * max(len(g) for g in self.groups)}), RCH0=(2 * GTCB + 19) if GATHER else (5 if PAIR else 16 - NOSENT) * nm.TCB,
+                     RCH1=(2 * GTCB + 19) if GATHER else (5 if PAIR else 16 - NOSENT) * nm.TCB, LCH=2 * nm.TCB, JOBS=nj * nm.JOB,
+                     FTAB=F * FT_SIZE, **({} if PAIR else {"WADDR": F}), **{f"FCH{b}": (3 - NOSENT) * nm.TCB for b in range(NLB)},
                      **{f"SLOT{j}": self.slot_size for j in range(slots)}, **({"MSKD": 1} if P9_SHARE and P9_MODE != "nomask" else {}),
-                     **({"MPS": 8} if MID_PUMP else {}), **({"PRB": PRB_WORDS} if PRB_WORDS else {}))
+                     **({"MPS": 8} if MID_PUMP else {}), **({"JX": 2} if LINK else {}), **({"PRB": PRB_WORDS} if PRB_WORDS else {}))
         if WB == "sb":
             for b in range(2):
                 sizes[f"WCH{b}"] = (3 + 1) * nm.TCB
+        elif PAIR:
+            sizes["WCH0"] = sizes["WCH1"] = 3 * nm.TCB
         else:
-            sizes["WCH0"] = (self.gmax + 1) * GTCB + 3 * self.gmax + 1 if GATHER_W else (3 * self.gmax + 1) * nm.TCB
+            sizes["WCH0"] = (self.gmax + 1) * GTCB + 3 * self.gmax + 1 if GATHER_W else (3 * self.gmax + 1 - NOSENT) * nm.TCB
         self.nclr = C + C * len(near)
         for name, n in sorted(sizes.items(), key=lambda x: -x[1]):
             even = name.startswith("SLOT")
@@ -831,7 +1233,7 @@ class Layout(n2.Layout):
             alloc[name] = rg.take(r, n, even=even)
         self.alloc = alloc
         self.slot = [alloc[f"SLOT{j}"] for j in range(slots)]
-        self.lb = [alloc["LB"] + 1 + self.lbw * b for b in range(2)]     # each buffer's row (its flag at -1)
+        self.lb = [alloc["LB"] + 1 + self.lbw * b for b in range(NLB)]     # each buffer's row (its flag at -1)
         self.b3 = alloc["FLAGREP"]
         self.rep = self.b3 + 16
         b3 = self.b3
@@ -840,15 +1242,18 @@ class Layout(n2.Layout):
         self.flags = [b3 + 10, b3 + 11]
         self.fflags = [lb - 1 for lb in self.lb]
         v.update(g)
+        v["T_P"] = T_P
+        if LINK:
+            v.update(J_CHK2=alloc["JX"], J_TMP=alloc["JX"] + 1)
         self.sb = [alloc["SB"], alloc["SB"] + nm.SB_WORDS]
         self.xhi_b2 = self.wbuf_b2 = False
-        self.wbuf = self.lb[1] + T_SIZE3
+        self.wbuf = self.lb[NL % NLB] + T_SIZE3
         self.b2_to = self.b2_data = 0
         self.lp = {i: nm.rup16(self.ring[i]) for i in self.far}
         o, self.far_off = 0, {}
         for i in self.far:
             self.far_off[i] = o
-            o += C * (self.lp[i] + 16)
+            o += 2 * (3 * self.lp[i] + 48) if PAIR else C * (self.lp[i] + 16)
         self.hist_off = o
         self.sent_off = o + nm.HIST_N
         self.w_off = nm.rup16(self.sent_off + 2)
@@ -871,7 +1276,7 @@ class Layout(n2.Layout):
                  NJOBS=nj, CLR=alloc["CLR"], NCLR=self.nclr, DRIVE_TAB=alloc["DRIVE_TAB"],
                  FADE_TAB=alloc["FADE_TAB"], EQ_TAB=self.eq_tab, STOMP_GAIN=self.stomp_gain, COLD_PM=self.cold_pm,
                  WBUF=self.wbuf, HEADL=nm.HEADL, LBUF=self.sb[0], LBUF_N=2 * nm.SB_WORDS, LCH=alloc["LCH"],
-                 LCH_CP=(alloc["LCH"] + nm.TCB_II) & 0x7FFFF, FARTAB=alloc["FTAB"], WADDR=alloc["WADDR"],
+                 LCH_CP=(alloc["LCH"] + nm.TCB_II) & 0x7FFFF, FARTAB=alloc["FTAB"], WADDR=alloc.get("WADDR", 0),
                  NFAR=F, S_STREAM=nm.S_STREAM, S_HB0=self.hb[0], S_HB1=self.hb[1], S_HB2=self.hb[2],
                  HIST_OFF=self.hist_off, SENT_OFF=self.sent_off, SENT2_OFF=self.sent_off + 1,
                  SDR_NEED=self.sdr_need, MAGIC=nm.MAGIC, POLLMAX=nm.POLLMAX, LPOLLMAX=nm.LPOLLMAX,
@@ -884,8 +1289,8 @@ class Layout(n2.Layout):
                  NRP=self.nrp, INST_DM=nf.INST_DM, INST_PM=nf.INST_PM, INST_DM_LO=dlo, INST_DM_HI=dhi,
                  INST_PM_LO=plo, INST_PM_HI=phi, INST_DM_NEED=self.inst_dm_need, INST_PM_NEED=self.inst_pm_need,
                  W_OFF=self.w_off, HDR=HDR, HDR_RECH=3 if HEAD_FETCH else HDR,
-                 HFLAG=self.fflags[1], SIL_N=SIL, N_WEIGHTS=nam_lite.N_WEIGHTS, 
-                 DIAG=b3 + 13, DCNT=b3 + 14, DCAUSE=b3 + 15, **({"MSKD": alloc["MSKD"]} if P9_SHARE and P9_MODE != "nomask" else {}),
+                 HFLAG=self.fflags[NL % NLB], **({"LBF2": self.fflags[2]} if LB3 else {}), SIL_N=SIL, N_WEIGHTS=nam_lite.N_WEIGHTS, 
+                 DONEM=nm.DMAS | nm.CHS | nm.EXTS, WBFLAG=self.flags[0], DIAG=b3 + 13, DCNT=b3 + 14, DCAUSE=b3 + 15, **({"MSKD": alloc["MSKD"]} if P9_SHARE and P9_MODE != "nomask" else {}),
                  **({"MPS": alloc["MPS"], "MP_INNER": 8 // MID_PUMP, "MP_OUTER": MID_PUMP} if MID_PUMP else {}),
                  **({"TLEN": TLEN, "GTCB": GTCB} if GATHER else {}),
                  **({"PRB": alloc["PRB"]} if PRB_WORDS else {}))
@@ -916,7 +1321,7 @@ class Layout(n2.Layout):
             if i < NL:
                 row[T3["T_NXN"]] = lw(KERNEL[i])
                 row[T3["T_NXO"]] = self.w_off + wo[i]
-                row[T3["T_NXB"]] = 3 * (i % 2)
+                row[T3["T_NXB"]] = self.lb[i % NLB] if LB3 else 3 * (i % 2)
                 row[T3["T_NXR"]] = trows + T_SIZE3 * i
 
         r_1 = [0] * T_SIZE3
@@ -929,30 +1334,34 @@ class Layout(n2.Layout):
             row[T3["T_KD"]] = -(k - 1) * d
             row[T3["T_D"]] = d
             row[T3["T_NW"]] = -lw(k)
+            if PAIR:
+                row[T_P] = 6 if i in self.far else 2
             nx(row, i + 1)
             if HEAD_FETCH and i == NL - 1:              # after the last layer: the head's 49 into LB1
                 assert NL % 2 == 1                      # (with the blank row NL: its row area zeroed)
                 row[T3["T_NXN"]] = 49
                 row[T3["T_NXO"]] = self.w_off + 3
-                row[T3["T_NXB"]] = 3
+                row[T3["T_NXB"]] = self.lb[NL % NLB] if LB3 else 3
                 row[T3["T_NXR"]] = trows + T_SIZE3 * NL
             if i in self.far:
                 j = self.far.index(i)
                 L = self.lp[i]
                 row[T3["T_RB"]] = self.far_off[i]
-                row[T3["T_STRIDE"]] = L + 16
+                row[T3["T_STRIDE"]] = 3 * L + 48 if PAIR else L + 16      # (pair rings: ring B - ring A)
                 row[T3["T_L"]] = L
-                row[T3["T_S"]] = 16
-                row[T3["T_KS"]] = -(k - 1) * 16
+                row[T3["T_S"]] = 48 if PAIR else 16
+                row[T3["T_KS"]] = -(k - 1) * row[T3["T_S"]]
                 row[T3["T_FAR"]] = j + 1
                 row[T3["T_RPOS"]] = rpos[i]
                 row[T3["T_SB"]] = self.sb[j % 2]
-                if WB == "sb":
+                if PAIR:
+                    row[T3["T_OB"]] = al["OUTBUF"] + 48 * (j % 2)
+                elif WB == "sb":
                     row[T3["T_OB"]] = self.sb[j % 2] + 80     # (unused: no write-back buffer)
                 else:
                     g = next(g for g in self.groups if j in g)
                     row[T3["T_OB"]] = al["OUTBUF"] + 48 * g.index(j)
-                row[T3["T_WA"]] = al["WADDR"] + j
+                row[T3["T_WA"]] = al[f"WCH{j % 2}"] if PAIR else al["WADDR"] + j
                 row[T3["T_SIL"]] = ((self.w_off + nam_lite.N_WEIGHTS) if SIL_SDRAM else (nm.S_STREAM + self.hdr)) + C + C * i
             else:
                 L = self.nring[i]
@@ -966,7 +1375,8 @@ class Layout(n2.Layout):
                 ftab += row[:FT_SIZE]
         put(trows, tab + [0] * T_SIZE3)
         put(al["FTAB"], ftab)
-        put(al["WADDR"], [0] * F)
+        if "WADDR" in al:
+            put(al["WADDR"], [0] * F)
         rp_slot = self.s_rp + self.nrp - 1
         rpt = []
         for i, j in sorted(self.rp_index.items(), key=lambda x: x[1]):
@@ -992,12 +1402,24 @@ class Layout(n2.Layout):
                         [0, ch + 34, 1, 1, 0, 1, 1, self.flags[b]] + [0] * 18 + [0])
                 continue
             t = []
+            if PAIR:                           # tap t: 48 words (16 sample pairs... 8 pairs x 3 channels)
+                for n in range(5):
+                    t += tcb(0 if n == 4 else ch + nm.TCB * (n + 1) + nm.TCB_II, 48, self.sb[b] + 48 * n)
+                put(ch, t)
+                continue
             for n in range(15):
                 tt, c = divmod(n, 3)
-                t += tcb(ch + nm.TCB * (n + 1) + nm.TCB_II, 16, self.sb[b] + 96 * c + 16 * tt)
-            t += tcb(0, 1, self.flags[b])
+                t += tcb(0 if NOSENT and n == 14 else ch + nm.TCB * (n + 1) + nm.TCB_II, 16,
+                         self.sb[b] + 96 * c + 16 * tt)
+            if not NOSENT:
+                t += tcb(0, 1, self.flags[b])
             put(ch, t)
-        if WB == "sb":
+        if PAIR:                               # A's block, B's block, B's pair before (x0, step 2)
+            for b in range(2):
+                w = al[f"WCH{b}"]
+                put(w, tcb(w + nm.TCB + nm.TCB_II, 48, self.sb[b] + 240) +
+                    tcb(w + 2 * nm.TCB + nm.TCB_II, 48, al["OUTBUF"] + 48 * b) + [0, 2, 0, 3, 2, self.sb[b] + 240])
+        elif WB == "sb":
             for b in range(2):
                 t = []
                 for c in range(3):
@@ -1016,13 +1438,16 @@ class Layout(n2.Layout):
             t = []
             for m in range(3 * self.gmax):
                 jj, c = divmod(m, 3)
-                t += tcb(al["WCH0"] + nm.TCB * (m + 1) + nm.TCB_II, 16, al["OUTBUF"] + 48 * jj + 16 * c)
-            t += tcb(0, 1, 0)
+                t += tcb(0 if NOSENT and m == 3 * self.gmax - 1 else al["WCH0"] + nm.TCB * (m + 1) + nm.TCB_II, 16,
+                         al["OUTBUF"] + 48 * jj + 16 * c)
+            if not NOSENT:
+                t += tcb(0, 1, 0)
             put(al["WCH0"], t)
-        for b in range(2):
+        for b in range(NLB):
             ch = al[f"FCH{b}"]
             put(ch, tcb(ch + nm.TCB + nm.TCB_II, T_SIZE3, self.lb[b]) +
-                tcb(ch + 2 * nm.TCB + nm.TCB_II, 0, self.lb[b] + T_SIZE3) + tcb(0, 1, self.fflags[b]))
+                (tcb(0, 0, self.lb[b] + T_SIZE3) if NOSENT else
+                 tcb(ch + 2 * nm.TCB + nm.TCB_II, 0, self.lb[b] + T_SIZE3) + tcb(0, 1, self.fflags[b])))
         put(al["LCH"], tcb(al["LCH"] + nm.TCB + nm.TCB_II, 0, self.sb[0]) + tcb(0, 1, v["FLAGL"]))
         jobs = []
         for thr, _, kind, j in self.jobs:
@@ -1030,13 +1455,16 @@ class Layout(n2.Layout):
                 ch = (al["RCH0"], al["RCH1"])[j % 2]
                 jobs += [0, thr, al["FTAB"] + FT_SIZE * j, ch, self.flags[j % 2],
                          (ch + (7 if GATHER else nm.TCB_II)) & 0x7FFFF, 0, 0]
+            elif kind == "W" and PAIR:
+                ch = al[f"WCH{j % 2}"]
+                jobs += [1, thr, al["FTAB"] + FT_SIZE * j, ch, 0, (ch + nm.TCB_II) & 0x7FFFF, 1, 0]
             elif kind == "W":
                 grp = self.groups[j]
                 ch = al["WCH0"] + (GTCB * (self.gmax - len(grp)) if GATHER_W else nm.TCB * 3 * (self.gmax - len(grp)))
                 jobs += [1, thr, al["FTAB"] + FT_SIZE * grp[0], ch, al["WADDR"] + grp[0],
                          (ch + (7 if GATHER_W else nm.TCB_II)) & 0x7FFFF, len(grp), 0]
             else:                                    # F j: layer j's row + weights (j == NL: the head's)
-                b = j % 2 if j < NL else 1
+                b = j % NLB if j < NL else NL % NLB
                 ch = al[f"FCH{b}"]
                 off, n = (self.w_off + wo[j], lw(KERNEL[j])) if j < NL else (self.w_off + 3, 49)
                 jobs += [2, thr, trows + T_SIZE3 * j, ch, self.fflags[b], (ch + nm.TCB_II) & 0x7FFFF, off, n]
