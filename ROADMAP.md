@@ -13,8 +13,14 @@ Written 2026-11-12, before any firmware work in this repository. Everything belo
 
 ## Phase 0: a baseline we can trust
 
-- [ ] Build `main` from the stock file and confirm the output is byte-identical to the Floor port's tested build.
-- [ ] Run the test suite on `main` (fast tests and the simulator tests) and record the result.
+- [x] Build `main` from the stock file and confirm the output is byte-identical to the Floor port's tested build. **Verified offline**, 2026-11-12, `main` at `a84fcdb`, Windows 11, Python 3.10.11, capstone 5.0.7:
+  - With the setup page's settings (`NAM_KERNEL=nam_floor5 NAM_MAX_BLOCKS=16 NAM_PR1=0`, simulator check on): MD5 `f4338695c5fa965f9100a0d82e632b7e`, the setup page's pinned `BUILT_MD5` and the file tested on a unit. KernelCheck PASS (steady mean 34874 instructions). About 4 minutes.
+  - With no settings (PR #1's DMA patches on, the default since `8f54b04`): MD5 `d44f61687519f9557265658748ac828f`, KernelCheck PASS (34877). This is not the pinned build, and as far as we know this exact file has not been installed on a unit.
+- [x] Run the test suite on `main` (fast tests and the simulator tests) and record the result. **Verified offline**, 2026-11-12, `main` at `a84fcdb`:
+  - `pytest -m "not slow and not firmware"`: 96 passed, 1 skipped (`test_ramrun.py`: needs `arm-none-eabi-gcc`).
+  - `pytest -m slow`: 2 passed (about 8 minutes).
+  - The `firmware` tests need a Stomp file (`HX_STOMP_HXF`) and were not run.
+  - The Floor's own checks in `helix-floor/floor/` are scripts, not pytest tests. Run each with `python <script>`: `test_arm_guards.py`, `test_ir_title.py` and `test_probe.py` PASS. `test_ir_title_knob.py` PASS. It needs `pip install unicorn` and the stock Entry 0 in its byte-swapped form as its argument (`tools/hxf.py unpack`, then `tools/l6ia.py <l6ia> <dir>`, then pass `00_type2.sw4.bin`).
 - [ ] Decide how this repository follows its upstreams: merge from `floor-upstream/helix-floor` on a schedule, and how often to refresh `integration/hxtra-tooling` from `hxtra/main`.
 - [ ] Write down the recovery procedure both maintainers have rehearsed, and on which units.
 
