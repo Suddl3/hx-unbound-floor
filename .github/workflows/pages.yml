@@ -2,9 +2,10 @@ name: pages
 
 # Publishes the setup page (web/) with the Python tools the in-browser build
 # runs (tools/), in the repository's own layout: the page is at /web/.
+# HX Unbound Floor: manual only for now. This repository has no setup page of
+# its own yet; the Floor port's is at
+# https://savedadodo.github.io/helix-floor-nam-lite/floor-web/
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

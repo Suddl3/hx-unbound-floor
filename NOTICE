@@ -1,3 +1,15 @@
+HX Unbound Floor
+----------------
+This repository (https://github.com/Suddl3/hx-unbound-floor) is a modified
+version of hx-stomp-nam-lite by Derek Bui
+(https://github.com/nocaseguy/hx-stomp-nam-lite), by way of the Helix Floor
+port by savedadodo (https://github.com/savedadodo/helix-floor-nam-lite,
+branch helix-floor, commit ad69ec4: helix-floor/ and floor-web/). Changes
+made here from 2026-11-12 on are by the HX Unbound Floor contributors; the
+commit history records who changed what and when. Work brought in from
+HXtra (https://github.com/wisemandenny/hxtra) keeps its authors' commits.
+The whole is under the same licence, below.
+
 Copyright (C) 2026 Derek Bui
 
 This program is free software: you can redistribute it and/or modify it under
