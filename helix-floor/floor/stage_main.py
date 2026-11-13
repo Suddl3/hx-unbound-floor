@@ -190,6 +190,54 @@ def rename(im, names):
     return f"real names: {t2} Table 2 rows, {it} browser items renamed ({len(names)} models)"
 
 
+def cost_labels(im, t1, t2, lists):
+    """EXPERIMENT (NAM_COST_LABELS=1, 2026-11-11): names end with the model's DSP cost as a share of one
+    DSP's 9,000-unit budget (Table 1), e.g. "Some Drive (10%)". On the unit the browser item name (26
+    bytes) is what a block in the path shows, the Table 2 short name (16 bytes) what the add-block
+    catalog shows, so both get it, each name cut to fit its field."""
+    cost = {struct.unpack_from('<I', t1, i)[0]: struct.unpack_from('<I', t1, i + 8)[0] for i in range(0, len(t1), 12)}
+    for i in range(0, len(t2), 44):                    # the fixed path blocks (inputs, mixer, output) keep their names
+        if t2[i + 22] in (9, 10) and bytes(t2[i + 4: i + 20]).split(b'\x00')[0] in (b"A", b"B", b"Mixer", b"OUTPUT"):
+            cost.pop(struct.unpack_from('<I', t2, i)[0], None)
+
+    def fit(name, room):
+        """name in room chars; a short last word (a variant: Brt, Nrm, Jump, Lead, Ch1) is kept, the rest cut."""
+        if len(name) <= room:
+            return name
+        w = name.split()
+        if len(w) >= 2 and len(w[-1]) <= 4:
+            return " ".join(w[:-1])[:room - len(w[-1]) - 1].rstrip() + " " + w[-1]
+        return name[:room].rstrip()
+
+    def put(raw, at, size, ni):
+        c = cost.get(ni)
+        if not c:
+            return 0
+        name = bytes(raw[at: at + size]).split(b'\x00')[0].decode('latin1')
+        suf = f" ({max(1, round(c / 90))}%)"
+        room = size - 1 if size > 16 else size          # (a browser name keeps its NUL; Table 2's 16 may fill)
+        raw[at: at + size] = (fit(name, room - len(suf)) + suf).encode('latin1').ljust(size, b'\x00')
+        return 1
+
+    def label(raw, k):
+        return put(raw, 48 * k + 14, 26, struct.unpack_from('<I', raw, 48 * k + 4)[0])
+    n2 = sum(put(t2, i + 4, 16, struct.unpack_from('<I', t2, i)[0]) for i in range(0, len(t2), 44))
+    n, done = 0, set()
+    for j, (idx, cnt, raw) in enumerate(lists):
+        done.add(idx)
+        raw = bytearray(raw)
+        n += sum(label(raw, k) for k in range(cnt))
+        lists[j] = (idx, cnt, bytes(raw))
+    for idx in range(pa.E0_BLIST_SLOTS):
+        lp, lc = im.u32(BLIST_PTR_TAB + 4 * idx), im.u32(BLIST_CNT_TAB + 4 * idx)
+        if idx in done or not lp or not lc:
+            continue
+        raw = bytearray(im.rd(lp, 48 * lc))
+        n += sum(label(raw, k) for k in range(lc))
+        im.wr(lp, bytes(raw))
+    return f"cost labels: {n} browser items, {n2} Table 2 rows"
+
+
 def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
     im = Image(e0)
     name_log = rename(im, names) if names else None
@@ -197,6 +245,10 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
     pid, (rd1, c1, t1), (rd2, c2, t2), lists, (cat, nsub, fb), log = tables(im, src_ni, new_ni, n_params, xeno_ni)
     if name_log:
         log.append(name_log)
+    if os.environ.get("NAM_COST_LABELS") == "1":
+        t2 = bytearray(t2)
+        log.append(cost_labels(im, t1, t2, lists))
+        t2 = bytes(t2)
     hook = arm_guards.build().assemble()
     assert arm_guards.CAVE == CAVE
     cave = bytearray(hook)

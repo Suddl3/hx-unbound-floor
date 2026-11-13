@@ -144,6 +144,28 @@ def report_profile2(ch):
         print(f"  {name:24s} median {c:8,.0f} cycles  {c / tot:6.1%} of the call  {c / BLOCK:6.1%} of the DSP")
 
 
+def report_cal(ch):
+    """nam_floor5c: fields 1..6 = cfg + 1 (8 d + c), loop cycles, start -> done, polls after the loop, 0, sentinel."""
+    f = _profile_frames(ch)
+    if f is None:
+        print("no calibration signal (gain after the block must be 1)")
+        return
+    dn = ["none", "taps -> SB (B3)", "weights -> LB (B0)", "write-back <- OUTBUF (B0)"]
+    cn = ["reg add", "PM read LB (B0)", "DM read LB (B0)", "PM read SB (B3)", "DM read SB (B3)", "no loop", "no loop", "no loop"]
+    base = {}
+    print(f"frames {len(f)}")
+    for d in range(4):
+        for c in range(8):
+            g = f[f[:, 1] == 8 * d + c + 1]
+            if not len(g):
+                continue
+            lp, dn_, po, se = (np.median(g[:, k]) for k in (2, 3, 4, 6))
+            if d == 0:
+                base[c] = lp
+            print(f"  d{d} {dn[d]:26s} c{c} {cn[c]:16s} n {len(g):4d}  loop {lp:6.0f} (+{lp - base.get(c, lp):5.0f}, min {g[:, 2].min():5d})"
+                  f"  done {dn_:6.0f}  polls {po:5.0f}  sentinel {se:.0f}")
+
+
 def report_profile(ch):
     """nam_floor5p: v4 framing; fields 1..7 = -total, +lwait, -fwait, +head, -end, +pump (cycles/8), -polls.
     Frames are found by their marker (field 0 = 16384, 16384) followed by a negative pair (field 1)."""
@@ -168,6 +190,10 @@ def main():
     if "--profile2" in argv:
         argv.remove("--profile2")
         report_profile2(channels(argv[0] if argv else "5", "ASIO")[0])
+        return
+    if "--cal" in argv:
+        argv.remove("--cal")
+        report_cal(channels(argv[0] if argv else "5", "ASIO")[0])
         return
     if "--profile" in argv:
         argv.remove("--profile")

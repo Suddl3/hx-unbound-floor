@@ -10,3 +10,6 @@ __pycache__/
 .venv/
 .pytest_cache/
 !tools/ramboot/*.bin
+
+# local custom names (not shared)
+helix-floor/names/names.csv
