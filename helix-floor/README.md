@@ -22,7 +22,9 @@ shared**. Overview, status and findings: the [repository README](../README.md).
   builds masked P9I for each call, believing it was channel 0's: that froze the UI at random.)
 - **Cost:** about 52.8K cycles per 16-sample call on the unit, **~35% of a DSP** per block. The
   declared DSP cost is 3,600 (`NAM_DSP_COST`), so the Floor's own budget refuses a block that would
-  overload a DSP.
+  overload a DSP. With the faster PAIR kernel layout (`NAM_PAIR=1`, ~31% per block) a cost of 3,250 is
+  tested on the unit: it lets one ~800-unit block (e.g. Chamber) share a DSP with two NAMs. Keep 3,600
+  for the default kernel. See FINDINGS "NAM DSP cost 3250" and `floor/auto/headroom/`.
 - **Optional kernel path** (off by default, verified bit-exact in the simulator and on the unit):
   `NAM_GATHER=1` fetches each far layer's taps with one scatter/gather (tap-list) DMA and writes
   them back with scatter DMA. No measurable speed gain on hardware; kept for reference.
