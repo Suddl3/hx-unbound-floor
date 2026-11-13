@@ -92,7 +92,7 @@ fm_register:
 @ bits 5..0 (signed). It posts the 8-byte UI event {class, code, 0, 0, value (s32)} through POST, as the Floor's own
 @ producers do (the key function 0x2808bca0, the footswitch scan 0x2808b7e0, the pedal task), and replies 0.
 @ Class 1 is a key: value 1 press, 2 release, 3 release before a hold, 5 hold. Class 2 is a knob: code 0..6, value
-@ the turn (signed counts; 4 a step on an int setting). Other classes, and a seq without bit 15, only get the reply.
+@ the turn (signed counts; 4 a step on an int setting). Classes 0 and 3..7 are posted as they come (their codes and values are as given); a seq without bit 15 only gets the reply.
 fm_input:                           @ r0 the editor's stream, r1 the request -> r0 the stream's result
     push {r4-r7, r10, lr}
     sub sp, #16                     @ [sp] the result byte, [sp,#8] the event
@@ -100,10 +100,7 @@ fm_input:                           @ r0 the editor's stream, r1 the request -> 
     ldrh r4, [r1, #0xc]
     tst r4, #0x8000
     beq fi_reply
-    ubfx r0, r4, #12, #3
-    subs r1, r0, #1
-    cmp r1, #1
-    bhi fi_reply                    @ keys and knobs only
+    ubfx r0, r4, #12, #3            @ any class 0..7: the joystick and encoder presses are not keys or knobs
     strb r0, [sp, #8]
     ubfx r0, r4, #6, #6
     strb r0, [sp, #9]
