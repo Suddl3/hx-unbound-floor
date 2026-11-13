@@ -18,7 +18,7 @@
 
 .equ CMD, 0x52
 .equ CMD_INPUT, 0x51                @ remote input: a UI event packed in the request's seq (fm_input)
-.equ CMD_PEEK, 0x53                 @ the next frames read memory, not the screen: seq (15 bits) << 17 is the address, 0 = the screen (fm_peekset)
+.equ CMD_PEEK, 0x50                 @ the next frames read memory, not the screen: seq (15 bits) << 17 is the address, 0 = the screen (fm_peekset)
 .equ POST, 0x2808b669               @ (event): the UI's event post, every listener of the event's class called directly
 .equ SERVICE, 6
 .equ W, 800

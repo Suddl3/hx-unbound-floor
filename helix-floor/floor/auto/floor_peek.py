@@ -1,4 +1,4 @@
-"""Read the Helix Floor's SDRAM from a build with NAM_SCREEN_MIRROR=1 (command 0x53, m4/floor_mirror.s fm_peekset).
+"""Read the Helix Floor's SDRAM from a build with NAM_SCREEN_MIRROR=1 (command 0x50, m4/floor_mirror.s fm_peekset).
 The frame command then returns 480 rows of 1600 bytes from the chosen address instead of the screen: 768,000 bytes a
 frame (about 2 s). The window starts at a multiple of 128 KB (the address rides in the request's seq, 15 bits << 17).
 Only 0x28000000 .. 0x2a000000 is SDRAM; anything else may fault the unit, so this tool refuses it. HX Edit must be closed.
@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "hx"
 import hx_ctl  # noqa: E402
 import floor_mirror  # noqa: E402
 
-CMD_PEEK = 0x53
+CMD_PEEK = 0x50
 LO, HI = 0x28000000, 0x2A000000
 FRAME = 480 * 1600
 STEP = 5 * (1 << 17)                    # the window's useful step: 5 x 128 KB = 655,360 of the 768,000
@@ -40,7 +40,7 @@ class Peek:
         finally:
             ed.seq = keep
         if r != 0:
-            raise hx_ctl.HxError(f"peek: unexpected reply {r!r} (a build without the 0x53 command?)")
+            raise hx_ctl.HxError(f"peek: unexpected reply {r!r} (a build without the 0x50 command?)")
         self.m.img = None
         self.m.frame()
         return self.m.img.tobytes()
