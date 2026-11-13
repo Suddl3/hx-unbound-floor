@@ -25,21 +25,23 @@ bytes), so the same name appears in the add-block catalog and in a path.
 
 ## Drafting a full list (optional)
 
-`helix-floor/names/draft_names.py` drafts a `real_name` for every model from two files you supply. It ships no
-data, and its output goes to a folder of your choice (point `--out` at git-ignored space; `names.csv` is ignored).
+Three small scripts in `helix-floor/names/` draft a `real_name` for every model. They ship no data: each reads a
+file you provide and writes to a folder you choose (keep it git-ignored; `names.csv` already is).
 
 ```
-python helix-floor/names/draft_names.py --stock models_stock.csv --based-on line6_based_on.csv ^
-       [--overrides overrides.csv] --out my_names
+python helix-floor/names/dump_models.py Helix_Floor_v3.80.0_0x7d01f5efb.hxf -o my_names/models_stock.csv
+python helix-floor/names/read_based_on.py saved_line6_models_page.html -o my_names/line6_based_on.csv
+python helix-floor/names/draft_names.py --stock my_names/models_stock.csv --based-on my_names/line6_based_on.csv ^
+       [--overrides my_names/overrides.csv] --out my_names
 ```
 
-- `models_stock.csv`: `internal,category,subcategory,db_display,table2_short,browser,browser_cats`, one row per
-  model in your Floor's firmware. The generator uses `internal`, `category` and the first `browser` name.
-- `line6_based_on.csv`: `section,line6_name,based_on,subcat`, taken from Line 6's public model list ("Based on").
-  Models without a match, and Line 6 originals, keep their names.
-- `overrides.csv` (optional): `floor_name,real_name`, wins over the draft.
-- Output: `names_map.csv` (give it to `NAM_NAMES`) and `real_names_draft.csv` (one row per display name; review
-  the flagged rows: names cut to 16 characters, duplicates, non-ASCII).
+1. `dump_models.py` lists the models in your own stock Floor firmware (internal name, category, display names).
+2. `read_based_on.py` reads Line 6's public Helix model list ("Based on" column), which you save from your browser
+   as a `.html` file. It does not download anything.
+3. `draft_names.py` matches the two, shortens to 16 ASCII characters and writes `names_map.csv` (give it to
+   `NAM_NAMES`) and `real_names_draft.csv` (one row per display name; review the flagged rows: names cut to 16
+   characters, duplicates, non-ASCII). Models without a match, and Line 6 originals, keep their names.
+   `overrides.csv` (`floor_name,real_name`) is optional and wins over the draft.
 
 This repository does not ship a list of real-gear names, the model dump or Line 6's page.
 

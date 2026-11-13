@@ -42,3 +42,17 @@ def test_draft_and_map(tmp_path):
     assert "HD2_AppDSP0" not in rows
     assert all(len(r["real_name"]) <= 16 and r["real_name"].isascii() for r in rows.values())
     assert (tmp_path / "real_names_draft.csv").exists()
+
+
+def test_read_based_on(tmp_path):
+    spec2 = importlib.util.spec_from_file_location("read_based_on", os.path.join(HERE, "..", "names", "read_based_on.py"))
+    rb = importlib.util.module_from_spec(spec2)
+    spec2.loader.exec_module(rb)
+    page = """<h3>AMP MODELS</h3><div><table><tr><th><p>AMP MODELS</p></th></tr>
+    <tr><td><table><tr><td><img src="x.jpg" /></td><td><p>Foo Amp </p></td></table></td>
+        <td><p>Guitar</p></td><td><p style="font-size:0.7em;">Acme<sup>R</sup> Boxer (bright)</p></td><td><p>1.00</p></td></tr>
+    </div><h3>CAB MODELS</h3><div><table>
+    <tr><td><table><tr><td><img src="y.jpg" /></td><td><p>1x12 Bar</p></td></table></td>
+        <td><p>Single</p></td><td><p>Acme 1x12 cab</p></td><td><p>1.00</p></td></tr></div>"""
+    assert rb.parse(page) == [("AMP MODELS", "Foo Amp", "Acme Boxer (bright)", "Guitar"),
+                              ("CAB MODELS", "1x12 Bar", "Acme 1x12 cab", "Single")]
