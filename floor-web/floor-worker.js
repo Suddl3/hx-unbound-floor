@@ -20,6 +20,7 @@ var SOURCES = [
   "helix-floor/floor/upstream.py",
   "helix-floor/floor/arm_guards.py",
   "helix-floor/floor/ir_title.py",
+  "helix-floor/floor/screen_mirror.py",
   "helix-floor/floor/floor_hxf.py",
   "helix-floor/floor/nam_floor.py",
   "helix-floor/floor/nam_floor2.py",
