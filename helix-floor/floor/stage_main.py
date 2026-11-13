@@ -24,6 +24,7 @@ import l6ia  # noqa: E402
 import patch_amp as pa  # noqa: E402
 import arm_guards  # noqa: E402
 import ir_title  # noqa: E402
+import screen_mirror  # noqa: E402
 
 E_MAIN, E_COPY, E_DB = 0, 1, 4
 TAB1_BASE_PTRS = (0x28134D70, 0x28134DBC, 0x28134DD4, 0x28134EC8, 0x28134F80)
@@ -268,6 +269,10 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
     tcode, ca, cb = (ir_title.build(title_base, [], [pid], 6) if E555 and V555 == "amp" else
                      ir_title.build(title_base, [] if E555 else [pid]))
     put(tcode)
+    mirror = None
+    if screen_mirror.ENABLED:                          # NAM_SCREEN_MIRROR=1: editor command 0x52 (screen_mirror.py)
+        mcode, msyms = screen_mirror.load()
+        mirror = (put(mcode), mcode, msyms)
     assert CAVE + len(cave) <= CAVE_END, f"cave {len(cave)} bytes, room {CAVE_END - CAVE}"
     # pointers and counts (all in seg2: the file offsets don't move with seg0's growth... they do,
     # so everything is written before the cave is spliced in)
@@ -292,6 +297,8 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
     assert im.rd(ir_title.RELAY, 8) == ir_title.RELAY_BEFORE, "the relay's 8 bytes are not the old check's tail"
     for va, b in ir_title.site_patches(ca, cb).items():
         im.wr(va, b)
+    if mirror:
+        log.append(screen_mirror.apply(im, mirror[0], mirror[2]))
     # splice the cave after seg0's bytes and move every later segment
     b, segs = im.b, im.segs
     h0, p0, l0, d0, n0 = segs[0]
@@ -308,7 +315,7 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
     log.append(f"IR-name title: caves {ca:#x} / {cb:#x} ({len(tcode)} B); sites {ir_title.SITE_A:#x}, "
                f"{ir_title.SITE_B:#x} (via relay {ir_title.RELAY:#x}) for preset id {pid}")
     log.append(f"tables at Table 1 {a1:#x}, Table 2 {a2:#x}, lists " + ", ".join(f"({i // 4},{i % 4}) {v:#x}" for i, _, v in la))
-    return out, pid, log, (a1, a2, la, ca, cb, tcode)
+    return out, pid, log, (a1, a2, la, ca, cb, tcode, mirror)
 
 
 def verify(e0, src_ni, new_ni, addrs, xeno_ni=None):
@@ -316,10 +323,14 @@ def verify(e0, src_ni, new_ni, addrs, xeno_ni=None):
     code in the cave run through the guard tests' interpreter."""
     n_t1 = 823 if E555 else 824
     im = Image(e0)
-    a1, a2, la, ca, cb, tcode = addrs
+    a1, a2, la, ca, cb, tcode, mirror = addrs
     for va, b in ir_title.site_patches(ca, cb).items():
         assert im.rd(va, len(b)) == b
     assert im.rd(ca, len(tcode)) == tcode
+    if mirror:
+        mva, mcode, msyms = mirror
+        assert im.rd(mva, len(mcode)) == mcode
+        assert im.rd(screen_mirror.REGALL, 8) == screen_mirror.tramp(mva + msyms["fm_regall"])
     assert all(im.u32(p) == a1 for p in TAB1_BASE_PTRS)
     assert pa._decode_thumb_movw(im.rd(TAB1_CNT_INSN, 4))[1] == n_t1 and im.u32(TAB1_END_PTR) == a1 + 12 * n_t1
     assert im.u32(TAB2_BASE_PTR) == a2 and pa._decode_thumb_movw(im.rd(TAB2_CNT_INSN, 4))[1] == 824

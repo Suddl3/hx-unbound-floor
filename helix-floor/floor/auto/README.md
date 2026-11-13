@@ -10,3 +10,4 @@ Floor on a non-NAM preset before installing any build that might hang.
   `06D_editbuf.bin`: your own preset dumps, not included.
 - `soak.py`, `soak_eb.py`, `stab2.py`: unattended stability soaks. `soak*.py` power-cycle a frozen Floor with `plug.py`
   (Kasa smart plug; set `FLOOR_PLUG` to its IP address; python-kasa).
+- `floor_mirror.py`: the Floor's screen on the PC (`shot`, `view`, `bench`) from a build with `NAM_SCREEN_MIRROR=1` (HX Edit closed). Ported from HXtra's screen mirror.
