@@ -3,8 +3,10 @@
 The Floor build can show your own names for the stock amps, cabs and effects instead of Line 6's. Text only:
 model ids, presets and code are unchanged.
 
-This repository ships only the mechanism and a neutral example (`helix-floor/names/names.example.csv`).
-It does not ship a list of real-gear names; make your own list locally.
+The repository ships the mechanism, a neutral example (`helix-floor/names/names.example.csv`) and one ready-made
+list, `helix-floor/names/real_names.csv` (533 models, drafted from Line 6's public "Based on" list). The browser
+builder (`floor-web/`) has an unchecked box, "Show real-gear names", that builds with that list. For a local build,
+point `NAM_NAMES` at it, or at your own copy. Real-gear names are third-party product names: see `NOTICE`.
 
 ## Use
 
@@ -22,6 +24,28 @@ It does not ship a list of real-gear names; make your own list locally.
 
 Names are written into the main program's Table 2 short name (16 bytes) and the browser list item (25 usable
 bytes), so the same name appears in the add-block catalog and in a path.
+
+## Drafting a full list (optional)
+
+Three small scripts in `helix-floor/names/` draft a `real_name` for every model. They ship no data: each reads a
+file you provide and writes to a folder you choose (keep it git-ignored; `names.csv` already is).
+
+```
+python helix-floor/names/dump_models.py Helix_Floor_v3.80.0_0x7d01f5efb.hxf -o my_names/models_stock.csv
+python helix-floor/names/read_based_on.py saved_line6_models_page.html -o my_names/line6_based_on.csv
+python helix-floor/names/draft_names.py --stock my_names/models_stock.csv --based-on my_names/line6_based_on.csv ^
+       [--overrides my_names/overrides.csv] --out my_names
+```
+
+1. `dump_models.py` lists the models in your own stock Floor firmware (internal name, category, display names).
+2. `read_based_on.py` reads Line 6's public Helix model list ("Based on" column), which you save from your browser
+   as a `.html` file. It does not download anything.
+3. `draft_names.py` matches the two, shortens to 16 ASCII characters and writes `names_map.csv` (give it to
+   `NAM_NAMES`) and `real_names_draft.csv` (one row per display name; review the flagged rows: names cut to 16
+   characters, duplicates, non-ASCII). Models without a match, and Line 6 originals, keep their names.
+   `overrides.csv` (`floor_name,real_name`) is optional and wins over the draft.
+
+The scripts ship no data of their own; `real_names.csv` is what they produced for firmware 3.80.0.
 
 ## Cost labels (experiment)
 
