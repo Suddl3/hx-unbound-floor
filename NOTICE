@@ -45,4 +45,7 @@ Trademarks
 ----------
 Line 6, Helix, HX Stomp and HX Edit are trademarks of Yamaha Guitar Group,
 Inc. This project is not affiliated with, endorsed by or supported by Line 6
-or Yamaha Guitar Group. SHARC is a trademark of Analog Devices, Inc.
+or Yamaha Guitar Group. The optional real-gear names (helix-floor/names/real_names.csv)
+are the names of third-party products, listed to say what each Line 6 model is
+based on (from Line 6's public model list); they belong to their owners, and
+this project is not affiliated with or endorsed by them. SHARC is a trademark of Analog Devices, Inc.

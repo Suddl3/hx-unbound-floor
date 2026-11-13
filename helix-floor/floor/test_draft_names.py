@@ -56,3 +56,12 @@ def test_read_based_on(tmp_path):
         <td><p>Single</p></td><td><p>Acme 1x12 cab</p></td><td><p>1.00</p></td></tr></div>"""
     assert rb.parse(page) == [("AMP MODELS", "Foo Amp", "Acme Boxer (bright)", "Guitar"),
                               ("CAB MODELS", "1x12 Bar", "Acme 1x12 cab", "Single")]
+
+
+def test_shipped_real_names_csv():
+    """The list the browser builder ships: right columns, 16 ASCII characters at most, one row per model."""
+    path = os.path.join(HERE, "..", "names", "real_names.csv")
+    rows = list(csv.DictReader(open(path, encoding="utf-8")))
+    assert rows and list(rows[0]) == ["internal", "floor_name", "real_name"]
+    assert all(r["real_name"] and len(r["real_name"]) <= 16 and r["real_name"].isascii() for r in rows)
+    assert len({r["internal"] for r in rows}) == len(rows)

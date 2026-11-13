@@ -1,0 +1,534 @@
+internal,floor_name,real_name
+HD2_AmpA30FawnBrt,A30 Fawn Brt,Vox AC30 Fawn B
+HD2_PreampA30FawnBrt,A30 Fawn Brt,Vox AC30 Fawn B
+HD2_AmpA30FawnNrm,A30 Fawn Nrm,Vox AC30 Fawn N
+HD2_PreampA30FawnNrm,A30 Fawn Nrm,Vox AC30 Fawn N
+HD2_AmpANGLMeteor,ANGL Meteor,ENGL Fireball
+HD2_PreampANGLMeteor,ANGL Meteor,ENGL Fireball
+HD2_AmpAgua51,Agua 51,Aguilar DB51
+HD2_PreampAgua51,Agua 51,Aguilar DB51
+HD2_AmpArchetypeClean,Archetype Clean,PRS Archon Cln
+HD2_PreampArchetypeClean,Archetype Clean,PRS Archon Cln
+HD2_AmpArchetypeLead,Archetype Lead,PRS Archon Lead
+HD2_PreampArchetypeLead,Archetype Lead,PRS Archon Lead
+HD2_AmpBrit2203,Brit 2203,Marshall JCM800
+HD2_PreampBrit2203,Brit 2203,Marshall JCM800
+HD2_AmpBrit2204,Brit 2204,JCM800 2204 50W
+HD2_PreampBrit2204,Brit 2204,JCM800 2204 50W
+HD2_AmpBritJ45Brt,Brit J45 Brt,Marshall JTM45 B
+HD2_PreampBritJ45Brt,Brit J45 Brt,Marshall JTM45 B
+HD2_AmpBritJ45Nrm,Brit J45 Nrm,Marshall JTM45 N
+HD2_PreampBritJ45Nrm,Brit J45 Nrm,Marshall JTM45 N
+HD2_AmpBritP75Brt,Brit P75 Brt,Park 75 Brt
+HD2_PreampBritP75Brt,Brit P75 Brt,Park 75 Brt
+HD2_AmpBritP75Nrm,Brit P75 Nrm,Park 75 Nrm
+HD2_PreampBritP75Nrm,Brit P75 Nrm,Park 75 Nrm
+HD2_AmpBritPlexiBrt,Brit Plexi Brt,Plexi SL100 Brt
+HD2_PreampBritPlexiBrt,Brit Plexi Brt,Plexi SL100 Brt
+HD2_AmpBritPlexiJump,Brit Plexi Jump,Plexi SL100 Jump
+HD2_PreampBritPlexiJump,Brit Plexi Jump,Plexi SL100 Jump
+HD2_AmpBritPlexiNrm,Brit Plexi Nrm,Plexi SL100 Nrm
+HD2_PreampBritPlexiNrm,Brit Plexi Nrm,Plexi SL100 Nrm
+HD2_AmpBritTremBrt,Brit Trem Brt,Marshall JTM50 B
+HD2_PreampBritTremBrt,Brit Trem Brt,Marshall JTM50 B
+HD2_AmpBritTremJump,Brit Trem Jump,Marshall JTM50 J
+HD2_PreampBritTremJump,Brit Trem Jump,Marshall JTM50 J
+HD2_AmpBritTremNrm,Brit Trem Nrm,Marshall JTM50 N
+HD2_PreampBritTremNrm,Brit Trem Nrm,Marshall JTM50 N
+HD2_AmpBusyOneCh1,Busy One Ch1,Pearce BC-1 Ch1
+HD2_PreampBusyOneCh1,Busy One Ch1,Pearce BC-1 Ch1
+HD2_AmpBusyOneCh2,Busy One Ch2,Pearce BC-1 Ch2
+HD2_PreampBusyOneCh2,Busy One Ch2,Pearce BC-1 Ch2
+HD2_AmpBusyOneJump,Busy One Jump,Pearce BC-1 Jump
+HD2_PreampBusyOneJump,Busy One Jump,Pearce BC-1 Jump
+HD2_AmpCali400Ch1,Cali 400 Ch1,Mesa 400+ Ch1
+HD2_PreampCali400Ch1,Cali 400 Ch1,Mesa 400+ Ch1
+HD2_AmpCali400Ch2,Cali 400 Ch2,Mesa 400+ Ch2
+HD2_PreampCali400Ch2,Cali 400 Ch2,Mesa 400+ Ch2
+HD2_AmpCaliBass,Cali Bass,Mesa M9 Carbine
+HD2_PreampCaliBass,Cali Bass,Mesa M9 Carbine
+HD2_AmpCaliIVLead,Cali IV Lead,Mesa Mk IV Lead
+HD2_PreampCaliIVLead,Cali IV Lead,Mesa Mk IV Lead
+HD2_AmpCaliIVR1,Cali IV Rhythm 1,Mesa Mk IV Rhy1
+HD2_PreampCaliIVR1,Cali IV Rhythm 1,Mesa Mk IV Rhy1
+HD2_AmpCaliIVR2,Cali IV Rhythm 2,Mesa Mk IV Rhy2
+HD2_PreampCaliIVR2,Cali IV Rhythm 2,Mesa Mk IV Rhy2
+HD2_AmpCaliRectifire,Cali Rectifire,Mesa Dual Recto
+HD2_PreampCaliRectifire,Cali Rectifire,Mesa Dual Recto
+HD2_AmpCaliTexasCh1,Cali Texas Ch 1,Mesa LoneStar 1
+HD2_PreampCaliTexasCh1,Cali Texas Ch 1,Mesa LoneStar 1
+HD2_AmpCaliTexasCh2,Cali Texas Ch 2,Mesa LoneStar 2
+HD2_PreampCaliTexasCh2,Cali Texas Ch 2,Mesa LoneStar 2
+HD2_AmpCartographer,Cartographer,Ben Adrian Carto
+HD2_PreampCartographer,Cartographer,Ben Adrian Carto
+HD2_AmpDasBenzinLead,Das Benzin Lead,Diezel VH4 Lead
+HD2_PreampDasBenzinLead,Das Benzin Lead,Diezel VH4 Lead
+HD2_AmpDasBenzinMega,Das Benzin Mega,Diezel VH4 Mega
+HD2_PreampDasBenzinMega,Das Benzin Mega,Diezel VH4 Mega
+HD2_AmpDelSol300,Del Sol 300,Sunn Coliseum
+HD2_PreampDelSol300,Del Sol 300,Sunn Coliseum
+HD2_AmpDerailedIngrid,Derailed Ingrid,Trainwreck Exp
+HD2_PreampDerailedIngrid,Derailed Ingrid,Trainwreck Exp
+HD2_AmpDividedDuo,Divided Duo,Div13 JRT 9/15
+HD2_PreampDividedDuo,Divided Duo,Div13 JRT 9/15
+HD2_AmpEVPanamaBlue,EV Panama Blue,EVH 5150III Blu
+HD2_PreampEVPanamaBlue,EV Panama Blue,EVH 5150III Blu
+HD2_AmpEVPanamaRed,EV Panama Red,EVH 5150III Red
+HD2_PreampEVPanamaRed,EV Panama Red,EVH 5150III Red
+HD2_AmpEssexA15,Essex A15,Vox AC15
+HD2_PreampEssexA15,Essex A15,Vox AC15
+HD2_AmpEssexA30,Essex A30,Vox AC30 TopBst
+HD2_PreampEssexA30,Essex A30,Vox AC30 TopBst
+HD2_AmpFullertonBrt,Fullerton Brt,Fender 5C3 Brt
+HD2_PreampFullertonBrt,Fullerton Brt,Fender 5C3 Brt
+HD2_AmpFullertonJump,Fullerton Jump,Fender 5C3 Jump
+HD2_PreampFullertonJump,Fullerton Jump,Fender 5C3 Jump
+HD2_AmpFullertonNrm,Fullerton Nrm,Fender 5C3 Nrm
+HD2_PreampFullertonNrm,Fullerton Nrm,Fender 5C3 Nrm
+HD2_AmpGCougar800,G Cougar 800,GK 800RB
+HD2_PreampGCougar800,G Cougar 800,GK 800RB
+HD2_AmpGermanMahadeva,German Mahadeva,Bogner Shiva
+HD2_PreampGermanMahadeva,German Mahadeva,Bogner Shiva
+HD2_AmpGermanUbersonic,German Ubersonic,Bogner Uberschl
+HD2_PreampGermanUbersonic,German Ubersonic,Bogner Uberschl
+HD2_AmpGermanXtraBlue,German Xtra Blue,Ecstasy 101B Blu
+HD2_PreampGermanXtraBlue,German Xtra Blue,Ecstasy 101B Blu
+HD2_AmpGermanXtraRed,German Xtra Red,Ecstasy 101B Red
+HD2_PreampGermanXtraRed,German Xtra Red,Ecstasy 101B Red
+HD2_AmpGrammaticoBrt,GrammaticoLG Brt,Grammatico LG B
+HD2_PreampGrammaticoBrt,GrammaticoLG Brt,Grammatico LG B
+HD2_AmpGrammaticoJump,GrammaticoLG Jmp,Grammatico LG J
+HD2_PreampGrammaticoJump,GrammaticoLG Jmp,Grammatico LG J
+HD2_AmpGrammaticoNrm,GrammaticoLG Nrm,Grammatico LG N
+HD2_PreampGrammaticoNrm,GrammaticoLG Nrm,Grammatico LG N
+HD2_AmpInterstateZed,Interstate Zed,Dr Z Route 66
+HD2_PreampInterstateZed,Interstate Zed,Dr Z Route 66
+HD2_AmpJazzRivet120,Jazz Rivet 120,Roland JC-120
+HD2_PreampJazzRivet120,Jazz Rivet 120,Roland JC-120
+HD2_AmpMailOrderTwin,Mail Order Twin,Silvertone 1484
+HD2_PreampMailOrderTwin,Mail Order Twin,Silvertone 1484
+HD2_AmpMandarin80,Mandarin 80,Orange OR80
+HD2_PreampMandarin80,Mandarin 80,Orange OR80
+HD2_AmpMandarinBass200,Mandarin Bass200,Orange AD200
+HD2_PreampMandarinBass200,Mandarin Bass200,Orange AD200
+HD2_AmpMandarinRocker,Mandarin Rocker,Orange Rockrvb
+HD2_PreampMandarinRocker,Mandarin Rocker,Orange Rockrvb
+HD2_AmpMatchstickCh1,Matchstick Ch1,Matchless DC30 1
+HD2_PreampMatchstickCh1,Matchstick Ch1,Matchless DC30 1
+HD2_AmpMatchstickCh2,Matchstick Ch2,Matchless DC30 2
+HD2_PreampMatchstickCh2,Matchstick Ch2,Matchless DC30 2
+HD2_AmpMatchstickJump,Matchstick Jump,Matchless DC30 J
+HD2_PreampMatchstickJump,Matchstick Jump,Matchless DC30 J
+HD2_AmpMoonBrt,Moo)))n Brt,Sunn Model T Brt
+HD2_PreampMoonBrt,Moo)))n Brt,Sunn Model T Brt
+HD2_AmpMoonJump,Moo)))n Jump,Sunn Model T Jmp
+HD2_PreampMoonJump,Moo)))n Jump,Sunn Model T Jmp
+HD2_AmpMoonNrm,Moo)))n Nrm,Sunn Model T Nrm
+HD2_PreampMoonNrm,Moo)))n Nrm,Sunn Model T Nrm
+HD2_AmpPVPanama,PV Panama,Peavey 5150
+HD2_PreampPVPanama,PV Panama,Peavey 5150
+HD2_AmpPVVitriolClean,PV Vitriol Clean,Invective Clean
+HD2_PreampPVVitriolClean,PV Vitriol Clean,Invective Clean
+HD2_AmpPVVitriolLead,PV Vitriol Lead,Invective Lead
+HD2_PreampPVVitriolLead,PV Vitriol Lead,Invective Lead
+HD2_AmpPVVitriolCrunch,PV VitriolCrunch,Invective Crunch
+HD2_PreampPVVitriolCrunch,PV VitriolCrunch,Invective Crunch
+HD2_AmpPlacaterClean,Placater Clean,Friedman BE Cln
+HD2_PreampPlacaterClean,Placater Clean,Friedman BE Cln
+HD2_AmpPlacaterDirty,Placater Dirty,Friedman BE100
+HD2_PreampPlacaterDirty,Placater Dirty,Friedman BE100
+HD2_AmpSoloLeadClean,Solo Lead Clean,Soldano SLO Cln
+HD2_PreampSoloLeadClean,Solo Lead Clean,Soldano SLO Cln
+HD2_AmpSoloLeadCrunch,Solo Lead Crunch,Soldano SLO Crn
+HD2_PreampSoloLeadCrunch,Solo Lead Crunch,Soldano SLO Crn
+HD2_AmpSoloLeadOD,Solo Lead OD,Soldano SLO OD
+HD2_PreampSoloLeadOD,Solo Lead OD,Soldano SLO OD
+HD2_AmpSoupPro,Soup Pro,Supro S6616
+HD2_PreampSoupPro,Soup Pro,Supro S6616
+HD2_AmpStoneAge185,Stone Age 185,Gibson EH-185
+HD2_PreampStoneAge185,Stone Age 185,Gibson EH-185
+HD2_AmpTweedBluesBrt,Tweed Blues Brt,Bassman Brt
+HD2_PreampTweedBluesBrt,Tweed Blues Brt,Bassman Brt
+HD2_AmpTweedBluesNrm,Tweed Blues Nrm,Bassman Nrm
+HD2_PreampTweedBluesNrm,Tweed Blues Nrm,Bassman Nrm
+HD2_AmpUSDeluxeNrm,US Deluxe Nrm,Deluxe Rvb Nrm
+HD2_PreampUSDeluxeNrm,US Deluxe Nrm,Deluxe Rvb Nrm
+HD2_AmpUSDeluxeVib,US Deluxe Vib,Deluxe Rvb Vib
+HD2_PreampUSDeluxeVib,US Deluxe Vib,Deluxe Rvb Vib
+HD2_AmpUSDoubleNrm,US Double Nrm,Twin Reverb Nrm
+HD2_PreampUSDoubleNrm,US Double Nrm,Twin Reverb Nrm
+HD2_AmpUSDoubleVib,US Double Vib,Twin Reverb Vib
+HD2_PreampUSDoubleVib,US Double Vib,Twin Reverb Vib
+HD2_AmpUSDripmanNorm,US Dripman Nrm,Bassman Silver
+HD2_PreampUSDripmanNorm,US Dripman Nrm,Bassman Silver
+HD2_AmpUSPrincess,US Princess,Princeton Reverb
+HD2_PreampUSPrincess,US Princess,Princeton Reverb
+HD2_AmpUSSmallTweed,US Small Tweed,Fender Champ
+HD2_PreampUSSmallTweed,US Small Tweed,Fender Champ
+HD2_AmpUSSuperNorm,US Super Nrm,Super Reverb Nrm
+HD2_PreampUSSuperNorm,US Super Nrm,Super Reverb Nrm
+HD2_AmpUSSuperVib,US Super Vib,Super Reverb Vib
+HD2_PreampUSSuperVib,US Super Vib,Super Reverb Vib
+HD2_AmpVoltageQueen,Voltage Queen,Vintage Queen
+HD2_PreampVoltageQueen,Voltage Queen,Vintage Queen
+HD2_AmpWhoWatt100,WhoWatt 100,Hiwatt DR103
+HD2_PreampWhoWatt100,WhoWatt 100,Hiwatt DR103
+HD2_AmpWoodyBlue,Woody Blue,Acoustic 360
+HD2_PreampWoodyBlue,Woody Blue,Acoustic 360
+HD2_Cab1x12Celest12H,1x12 Celest 12H,1x12 Div13 H30
+HD2_Cab1x12DelSol,1x12 Del Sol,1x12 Sunn Colis
+HD2_Cab1x12FieldCoil,1x12 Field Coil,1x12 Gibson 185
+HD2_Cab1x12Lead80,1x12 Lead 80,1x12 Shiva CL80
+HD2_Cab1x12PrincessBlue,1x12 US Princess,1x12 Princeton
+HD2_Cab1x18DelSol,1x18 Del Sol,1x18 Sunn Colis
+HD2_Cab1x18WoodyBlue,1x18 Woody Blue,1x18 Acous 360
+HD2_Cab4x10Rhino,4x10 Ampeg HLF,4x10 SVT 410HLF
+HD2_Cab4x121960T75,4x12 1960 T75,4x12 1960AT75
+HD2_Cab8x10SVBeast,8x10 Ampeg SVT E,8x10 Ampeg SVT
+HD2_CabMicIr_1x10USPrincess,1x10 US Princess,1x10 Princeton
+HD2_Cab1x10PrincessCopperhead,1x10 US Princess,1x10 Princeton
+HD2_CabMicIr_1x10USPrincessWithPan,1x10 US Princess,1x10 Princeton
+HD2_CabMicIr_1x12BlueBell,1x12 Blue Bell,1x12 AC15 Blue
+HD2_Cab1x12BlueBell,1x12 Blue Bell,1x12 AC15 Blue
+HD2_CabMicIr_1x12BlueBellWithPan,1x12 Blue Bell,1x12 AC15 Blue
+HD2_CabMicIr_1x12CaliEXT,1x12 Cali EXT,1x12 Mesa Ext
+HD2_Cab1x12CaliExt,1x12 Cali EXT,1x12 Mesa Ext
+HD2_CabMicIr_1x12CaliEXTWithPan,1x12 Cali EXT,1x12 Mesa Ext
+HD2_CabMicIr_1x12CaliIV,1x12 Cali IV,1x12 Mesa Mk IV
+HD2_Cab1x12CaliIV,1x12 Cali IV,1x12 Mesa Mk IV
+HD2_CabMicIr_1x12CaliIVWithPan,1x12 Cali IV,1x12 Mesa Mk IV
+HD2_CabMicIr_1x12Epicenter,1x12 Epicenter,1x12 Epifani UL
+HD2_CabMicIr_1x12EpicenterWithPan,1x12 Epicenter,1x12 Epifani UL
+HD2_CabMicIr_1x12Fullerton,1x12 Fullerton,1x12 Fender 5C3
+HD2_Cab1x12Fullerton5C3,1x12 Fullerton,1x12 Fender 5C3
+HD2_CabMicIr_1x12FullertonWithPan,1x12 Fullerton,1x12 Fender 5C3
+HD2_CabMicIr_1x12Grammatico,1x12 Grammatico,1x12 LaGrange
+HD2_Cab1x12Grammatico5E3,1x12 Grammatico,1x12 LaGrange
+HD2_CabMicIr_1x12GrammaticoWithPan,1x12 Grammatico,1x12 LaGrange
+HD2_CabMicIr_1x12OpenCast,1x12 Open Cast,1x12 Open EVM12L
+HD2_CabMicIr_1x12OpenCastWithPan,1x12 Open Cast,1x12 Open EVM12L
+HD2_CabMicIr_1x12OpenCream,1x12 Open Cream,1x12 Open G12M65
+HD2_CabMicIr_1x12OpenCreamWithPan,1x12 Open Cream,1x12 Open G12M65
+HD2_CabMicIr_1x12USDeluxe,1x12 US Deluxe,1x12 Deluxe Oxf
+HD2_Cab1x12USDeluxe,1x12 US Deluxe,1x12 Deluxe Oxf
+HD2_CabMicIr_1x12USDeluxeWithPan,1x12 US Deluxe,1x12 Deluxe Oxf
+HD2_CabMicIr_1x8SmallTweed,1x8 Small Tweed,1x8 Fender Champ
+HD2_Cab1x8SmallTweed,1x8 Small Tweed,1x8 Fender Champ
+HD2_CabMicIr_1x8SmallTweedWithPan,1x8 Small Tweed,1x8 Fender Champ
+HD2_CabMicIr_2x12BlueBell,2x12 Blue Bell,2x12 AC30 Blue
+HD2_Cab2x12BlueBell,2x12 Blue Bell,2x12 AC30 Blue
+HD2_CabMicIr_2x12BlueBellWithPan,2x12 Blue Bell,2x12 AC30 Blue
+HD2_CabMicIr_2x12DoubleC12N,2x12 Double C12N,2x12 Twin C12N
+HD2_Cab2x12DoubleC12N,2x12 Double C12N,2x12 Twin C12N
+HD2_CabMicIr_2x12DoubleC12NWithPan,2x12 Double C12N,2x12 Twin C12N
+HD2_CabMicIr_2x12Interstate,2x12 Interstate,2x12 Dr Z V30
+HD2_Cab2x12Interstate,2x12 Interstate,2x12 Dr Z V30
+HD2_CabMicIr_2x12InterstateWithPan,2x12 Interstate,2x12 Dr Z V30
+HD2_CabMicIr_2x12JazzRivet,2x12 Jazz Rivet,2x12 JC-120
+HD2_Cab2x12JazzRivet,2x12 Jazz Rivet,2x12 JC-120
+HD2_CabMicIr_2x12JazzRivetWithPan,2x12 Jazz Rivet,2x12 JC-120
+HD2_CabMicIr_2x12MailC12Q,2x12 Mail C12Q,2x12 Silvertone
+HD2_Cab2x12MailC12Q,2x12 Mail C12Q,2x12 Silvertone
+HD2_CabMicIr_2x12MailC12QWithPan,2x12 Mail C12Q,2x12 Silvertone
+HD2_CabMicIr_2x12Mandarin,2x12 Mandarin30,2x12 Orange V30
+HD2_CabMicIr_2x12MandarinWithPan,2x12 Mandarin30,2x12 Orange V30
+HD2_CabMicIr_2x12MatchG25,2x12 Match G25,2x12 DC30 G12M25
+HD2_Cab1x12MatchG25,2x12 Match G25,2x12 DC30 G12M25
+HD2_CabMicIr_2x12MatchG25WithPan,2x12 Match G25,2x12 DC30 G12M25
+HD2_CabMicIr_2x12MatchH30,2x12 Match H30,2x12 DC30 G12H30
+HD2_Cab1x12MatchH30,2x12 Match H30,2x12 DC30 G12H30
+HD2_CabMicIr_2x12MatchH30WithPan,2x12 Match H30,2x12 DC30 G12H30
+HD2_CabMicIr_2x12SilverBell,2x12 Silver Bell,2x12 AC30 Silver
+HD2_Cab2x12SilverBell,2x12 Silver Bell,2x12 AC30 Silver
+HD2_CabMicIr_2x12SilverBellWithPan,2x12 Silver Bell,2x12 AC30 Silver
+HD2_CabMicIr_2x15Brute,2x15 Brute,2x15 Mesa EV
+HD2_Cab2x15Brute,2x15 Brute,2x15 Mesa EV
+HD2_CabMicIr_2x15BruteWithPan,2x15 Brute,2x15 Mesa EV
+HD2_CabMicIr_2x15USDripman,2x15 US Dripman,2x15 Bassman
+HD2_CabMicIr_2x15USDripmanWithPan,2x15 US Dripman,2x15 Bassman
+HD2_CabMicIr_4x10AmpegPro,4x10 Ampeg Pro,4x10 PR-410HLF
+HD2_CabMicIr_4x10AmpegProWithPan,4x10 Ampeg Pro,4x10 PR-410HLF
+HD2_CabMicIr_4x10Garden,4x10 Garden,4x10 Eden D410
+HD2_CabMicIr_4x10GardenWithPan,4x10 Garden,4x10 Eden D410
+HD2_CabMicIr_4x10TweedP10R,4x10 Tweed P10R,4x10 Bassman
+HD2_Cab4x10TweedP10R,4x10 Tweed P10R,4x10 Bassman
+HD2_CabMicIr_4x10TweedP10RWithPan,4x10 Tweed P10R,4x10 Bassman
+HD2_CabMicIr_4x10USSuper,4x10 US Super,4x10 Super Rvb
+HD2_CabMicIr_4x10USSuperWithPan,4x10 US Super,4x10 Super Rvb
+HD2_CabMicIr_4x121960AT75,4x12 1960A T75,4x12 1960AT75
+HD2_CabMicIr_4x121960AT75WithPan,4x12 1960A T75,4x12 1960AT75
+HD2_CabMicIr_4x12BlackbackH30,4x12 Blackback30,4x12 Park H30
+HD2_Cab4x12Blackback30,4x12 Blackback30,4x12 Park H30
+HD2_CabMicIr_4x12BlackbackH30WithPan,4x12 Blackback30,4x12 Park H30
+HD2_CabMicIr_4x12BritV30,4x12 Brit V30,4x12 1960AV V30
+HD2_CabMicIr_4x12BritV30WithPan,4x12 Brit V30,4x12 1960AV V30
+HD2_CabMicIr_4x12CaliV30,4x12 Cali V30,4x12 Mesa V30
+HD2_Cab4X12CaliV30,4x12 Cali V30,4x12 Mesa V30
+HD2_CabMicIr_4x12CaliV30WithPan,4x12 Cali V30,4x12 Mesa V30
+HD2_CabMicIr_4x12CartogC90,4x12 Cartog C90,4x12 Carto C90
+HD2_CabMicIr_4x12CartogC90WithPan,4x12 Cartog C90,4x12 Carto C90
+HD2_CabMicIr_4x12CartogGuv,4x12 Cartog Guv,4x12 Carto Guv
+HD2_CabMicIr_4x12CartogGuvWithPan,4x12 Cartog Guv,4x12 Carto Guv
+HD2_CabMicIr_4x12Greenback20,4x12 Greenback20,4x12 Basket M20
+HD2_Cab4x12Greenback20,4x12 Greenback20,4x12 Basket M20
+HD2_CabMicIr_4x12Greenback20WithPan,4x12 Greenback20,4x12 Basket M20
+HD2_CabMicIr_4x12Greenback25,4x12 Greenback25,4x12 Basket M25
+HD2_Cab4x12Greenback25,4x12 Greenback25,4x12 Basket M25
+HD2_CabMicIr_4x12Greenback25WithPan,4x12 Greenback25,4x12 Basket M25
+HD2_CabMicIr_4x12Greenback30,4x12 Greenback30,4x12 Basket H30
+HD2_CabMicIr_4x12Greenback30WithPan,4x12 Greenback30,4x12 Basket H30
+HD2_CabMicIr_4x12MOONT75,4x12 MOO)))N T75,4x12 Sunn T75
+HD2_CabMicIr_4x12MOONT75WithPan,4x12 MOO)))N T75,4x12 Sunn T75
+HD2_CabMicIr_4x12Mandarin,4x12 Mandarin EM,4x12 Orange EM
+HD2_Cab4x12MandarinEM,4x12 Mandarin EM,4x12 Orange EM
+HD2_CabMicIr_4x12MandarinWithPan,4x12 Mandarin EM,4x12 Orange EM
+HD2_CabMicIr_4x12SoloLeadEM,4x12 SoloLead EM,4x12 Soldano
+HD2_Cab4x12SoloLeadEM,4x12 SoloLead EM,4x12 Soldano
+HD2_CabMicIr_4x12SoloLeadEMWithPan,4x12 SoloLead EM,4x12 Soldano
+HD2_CabMicIr_4x12UberT75,4x12 Uber T75,4x12 Uberkab T75
+HD2_Cab4x12UberT75,4x12 Uber T75,4x12 Uberkab T75
+HD2_CabMicIr_4x12UberT75WithPan,4x12 Uber T75,4x12 Uberkab T75
+HD2_CabMicIr_4x12UberV30,4x12 Uber V30,4x12 Uberkab V30
+HD2_Cab4x12UberV30,4x12 Uber V30,4x12 Uberkab V30
+HD2_CabMicIr_4x12UberV30WithPan,4x12 Uber V30,4x12 Uberkab V30
+HD2_CabMicIr_4x12WhoWatt100,4x12 WhoWatt 100,4x12 Hiwatt Fane
+HD2_Cab4x12WhoWatt100,4x12 WhoWatt 100,4x12 Hiwatt Fane
+HD2_CabMicIr_4x12WhoWatt100WithPan,4x12 WhoWatt 100,4x12 Hiwatt Fane
+HD2_CabMicIr_4x12XXLV30,4x12 XXL V30,4x12 ENGL V30
+HD2_Cab4x12XXLV30,4x12 XXL V30,4x12 ENGL V30
+HD2_CabMicIr_4x12XXLV30WithPan,4x12 XXL V30,4x12 ENGL V30
+HD2_CabMicIr_6x10CaliPower,6x10 Cali Power,6x10 Mesa PwrHse
+HD2_Cab6x10CaliPower,6x10 Cali Power,6x10 Mesa PwrHse
+HD2_CabMicIr_6x10CaliPowerWithPan,6x10 Cali Power,6x10 Mesa PwrHse
+HD2_CabMicIr_8x10SVTAV,8x10 SVT AV,8x10 SVT 810AV
+HD2_CabMicIr_8x10SVTAVWithPan,8x10 SVT AV,8x10 SVT 810AV
+HD2_CabMicIr_SoupProEllipse,Soup Pro Ellipse,Supro 1x6x9
+HD2_Cab1x6x9SoupProEllipse,Soup Pro Ellipse,Supro 1x6x9
+HD2_CabMicIr_SoupProEllipseWithPan,Soup Pro Ellipse,Supro 1x6x9
+HD2_DelayAdriaticDelayMono,Adriatic Delay,DM-2 Adrian Mod
+HD2_DelayAdriaticDelayStereo,Adriatic Delay,DM-2 Adrian Mod
+HD2_DL4AnalogDelayStereo,Analog Echo,Boss DM-2
+HD2_DL4AnalogDelayStereoMod,Analog w/Mod,Memory Man Mod
+HD2_DelayBucketBrigadeMono,Bucket Brigade,Boss DM-2 (new)
+HD2_DelayBucketBrigadeStereo,Bucket Brigade,Boss DM-2 (new)
+HD2_DelayCosmosEchoMono,Cosmos Echo,Space Echo RE201
+HD2_DelayCosmosEchoStereo,Cosmos Echo,Space Echo RE201
+HD2_DelayDuckedDelayMono,Ducked Delay,TC 2290 Ducked
+HD2_DelayDuckedDelayStereo,Ducked Delay,TC 2290 Ducked
+HD2_DL4DynamicDelayStereo,Dynamic,TC 2290 Dynamic
+HD2_DL4EchoPlatterStereo,Echo Platter,Binson EchoRec
+HD2_DelayElephantManMono,Elephant Man,Dlx Memory Man
+HD2_DelayElephantManStereo,Elephant Man,Dlx Memory Man
+HD2_DL4MultiheadStereo,Multi-Head,Space Echo RE101
+HD2_DL4TapeEchoStereo,Tape Echo,Echoplex EP-3
+HD2_DelayTransistorTapeMono,Transistor Tape,Echoplex EP-3 SS
+HD2_DelayTransistorTapeStereo,Transistor Tape,Echoplex EP-3 SS
+HD2_DL4TubeEchoStereo,Tube Echo,Echoplex EP-1
+HD2_DistAlpacaRougeMono,Alpaca Rouge,Red Llama Mod
+HD2_DistAlpacaRougeStereo,Alpaca Rouge,Red Llama Mod
+HD2_DistArbitratorFuzzMono,Arbitrator Fuzz,Arbiter FuzzFace
+HD2_DistArbitratorFuzzStereo,Arbitrator Fuzz,Arbiter FuzzFace
+HD2_DistBallisticFuzzMono,Ballistic Fuzz,Euthymia ICBM
+HD2_DistBallisticFuzzStereo,Ballistic Fuzz,Euthymia ICBM
+HD2_DistRamsHeadMono,Bighorn Fuzz,Rams Head Muff
+HD2_DistRamsHeadStereo,Bighorn Fuzz,Rams Head Muff
+Line6BronzeMaster,Bronze Master,Bass Brassmaster
+HD2_DM4BuzzSaw,Buzz Saw,Maestro FZ-1
+HD2_DM4ClassicDistortion,Classic Dist,ProCo RAT
+HD2_DistClawthornDriveMono,Clawthorn Drive,Battering Ram
+HD2_DistClawthornDriveStereo,Clawthorn Drive,Battering Ram
+HD2_DM4ColorDrive,Colordrive,Colorsound OD
+HD2_DistCompulsiveDriveMono,Compulsive Drive,Fulltone OCD
+HD2_DistCompulsiveDriveStereo,Compulsive Drive,Fulltone OCD
+HD2_DistDarkDoveFuzzMono,Dark Dove Fuzz,Russian Big Muff
+HD2_DistDarkDoveFuzzStereo,Dark Dove Fuzz,Russian Big Muff
+HD2_DistDeezOneModMono,Deez One Mod,Boss DS-1 Keeley
+HD2_DistDeezOneModStereo,Deez One Mod,Boss DS-1 Keeley
+HD2_DistDeezOneVintageMono,Deez One Vintage,Boss DS-1 MIJ
+HD2_DistDeezOneVintageStereo,Deez One Vintage,Boss DS-1 MIJ
+HD2_DistDerangedMasterMono,Deranged Master,Rangemaster
+HD2_DistDerangedMasterStereo,Deranged Master,Rangemaster
+HD2_DistDhyanaDriveMono,Dhyana Drive,Hermida Zendrive
+HD2_DistDhyanaDriveStereo,Dhyana Drive,Hermida Zendrive
+HD2_DM4FacialFuzz,Facial Fuzz,Fuzz Face
+HD2_DM4FuzzPi,Fuzz Pi,Big Muff Pi
+HD2_DM4HeavyDistortion,Heavy Dist,Boss Metal Zone
+HD2_DistHedgehogD9Mono,Hedgehog D9,Maxon SD9
+HD2_DistHedgehogD9Stereo,Hedgehog D9,Maxon SD9
+HD2_DistHeirApparentMono,Heir Apparent,Prince of Tone
+HD2_DistHeirApparentStereo,Heir Apparent,Prince of Tone
+HD2_DistHorizonDriveMono,Horizon Drive,Horizon Precis
+HD2_DistHorizonDriveStereo,Horizon Drive,Horizon Precis
+HD2_DistIndustrialFuzzMono,Industrial Fuzz,Fuzz Factory
+HD2_DistIndustrialFuzzStereo,Industrial Fuzz,Fuzz Factory
+HD2_DM4JetFuzz,Jet Fuzz,Roland Jet Phasr
+HD2_DM4JumboFuzz,Jumbo Fuzz,Vox Tone Bender
+HD2_DistKWBMono,KWB,Benadrian KWB
+HD2_DistKWBStereo,KWB,Benadrian KWB
+KillerZ,Killer Z,Boss MT-2
+HD2_DistKinkyBoostMono,Kinky Boost,Xotic EP Booster
+HD2_DistKinkyBoostStereo,Kinky Boost,Xotic EP Booster
+HD2_DM4Line6Drive,L6 Drive,Colorsound ODmod
+HD2_DistLegendaryDriveMono,Legendary Drive,Carvin VLD1
+HD2_DistLegendaryDriveStereo,Legendary Drive,Carvin VLD1
+HD2_DistMinotaurMono,Minotaur,Klon Centaur
+HD2_DistMinotaurStereo,Minotaur,Klon Centaur
+HD2_DistObsidian7000Mono,Obsidian 7000,Darkglass B7K
+HD2_DistObsidian7000Stereo,Obsidian 7000,Darkglass B7K
+HD2_DM4OctaveFuzz,Octave Fuzz,Octavia
+HD2_DM4Overdrive,Overdrive,DOD 250 Preamp
+HD2_DistPillarsMono,Pillars,EQD Plumes
+HD2_DistPillarsStereo,Pillars,EQD Plumes
+HD2_DistPocketFuzzMono,Pocket Fuzz,Jordan Boss Tone
+HD2_DistPocketFuzzStereo,Pocket Fuzz,Jordan Boss Tone
+HD2_DistPrizeDriveMono,Prize Drive,Nobels ODR-1
+HD2_DistPrizeDriveStereo,Prize Drive,Nobels ODR-1
+HD2_DistRatatouilleDistMono,Ratatouille Dist,ProCo RAT (new)
+HD2_DistRatatouilleDistStereo,Ratatouille Dist,ProCo RAT (new)
+HD2_DistRegalBassDIMono,Regal Bass DI,Noble Bass DI
+HD2_DistRegalBassDIStereo,Regal Bass DI,Noble Bass DI
+HD2_DistScream808Mono,Scream 808,Ibanez TS808
+HD2_DistScream808Stereo,Scream 808,Ibanez TS808
+HD2_DM4Screamer,Screamer,Tube Screamer
+HD2_DistStuporODMono,Stupor OD,Boss SD-1 OD
+HD2_DistStuporODStereo,Stupor OD,Boss SD-1 OD
+HD2_DM4SubOctFuzz,Sub Oct Fuzz,PAiA Roctave
+HD2_DistSwedishChainsawMono,Swedish Chainsaw,Boss HM-2
+HD2_DistSwedishChainsawStereo,Swedish Chainsaw,Boss HM-2
+HD2_DistTeemahMono,Teemah!,Timmy OD
+HD2_DistTeemahStereo,Teemah!,Timmy OD
+HD2_DistToneSovereignMono,Tone Sovereign,King of Tone
+HD2_DistToneSovereignStereo,Tone Sovereign,King of Tone
+HD2_DistTopSecretODMono,Top Secret OD,DOD OD-250
+HD2_DistTopSecretODStereo,Top Secret OD,DOD OD-250
+HD2_DistTriangleFuzzMono,Triangle Fuzz,Big Muff Triangl
+HD2_DistTriangleFuzzStereo,Triangle Fuzz,Big Muff Triangl
+HD2_DM4TubeDrive,Tube Drive,Tube Driver
+HD2_DistTycoctaviaFuzzMono,Tycoctavia Fuzz,Octavia (new)
+HD2_DistTycoctaviaFuzzStereo,Tycoctavia Fuzz,Octavia (new)
+HD2_DistValveDriverMono,Valve Driver,TubeDriver (new)
+HD2_DistValveDriverStereo,Valve Driver,TubeDriver (new)
+HD2_DistVerminDistMono,Vermin Dist,ProCo RAT (old)
+HD2_DistVerminDistStereo,Vermin Dist,ProCo RAT (old)
+HD2_DistVitalBoostMono,Vital Boost,EQD Life Boost
+HD2_DistVitalBoostStereo,Vital Boost,EQD Life Boost
+HD2_DistVitalDistMono,Vital Dist,EQD Life Dist
+HD2_DistVitalDistStereo,Vital Dist,EQD Life Dist
+HD2_DistWringerFuzzMono,Wringer Fuzz,Boss FZ-2 Mod
+HD2_DistWringerFuzzStereo,Wringer Fuzz,Boss FZ-2 Mod
+HD2_DistXenomorphFuzzMono,Xenomorph Fuzz,Harm Antagonizr
+HD2_DistXenomorphFuzzStereo,Xenomorph Fuzz,Harm Antagonizr
+HD2_DistZeroAmpBassDIMono,ZeroAmp Bass DI,SansAmp Bass DI
+HD2_DistZeroAmpBassDIStereo,ZeroAmp Bass DI,SansAmp Bass DI
+HD2_CompressorOptoCompMono,Ampeg Opto Comp,Ampeg Octo Comp
+HD2_CompressorOptoCompStereo,Ampeg Opto Comp,Ampeg Octo Comp
+HD2_DM4BlueComp,Blue Comp,Boss CS-1
+HD2_DM4BlueCompTreb,Blue Comp Treb,Boss CS-1 Treble
+HD2_DM4BoostComp,Boost Comp,MXR Micro Amp
+HD2_CompressorKinkyCompMono,Kinky Comp,Xotic SP Comp
+HD2_CompressorKinkyCompStereo,Kinky Comp,Xotic SP Comp
+HD2_CompressorLAStudioCompMono,LA Studio Comp,LA-2A (new)
+HD2_CompressorLAStudioCompStereo,LA Studio Comp,LA-2A (new)
+HD2_DM4RedComp,Red Comp,MXR Dyna Comp
+HD2_CompressorRedSqueezeMono,Red Squeeze,Dyna Comp (new)
+HD2_CompressorRedSqueezeStereo,Red Squeeze,Dyna Comp (new)
+HD2_CompressorRochesterCompMono,Rochester Comp,Ashly CLX-52
+HD2_CompressorRochesterCompStereo,Rochester Comp,Ashly CLX-52
+HD2_DM4TubeComp,Tube Comp,Teletronix LA-2A
+HD2_EQGraphic10BandMono,10 Band Graphic,MXR 10-Band EQ
+HD2_EQGraphic10BandStereo,10 Band Graphic,MXR 10-Band EQ
+HD2_CaliQMono,Cali Q Graphic,Mesa Mk IV EQ
+HD2_CaliQStereo,Cali Q Graphic,Mesa Mk IV EQ
+HD2_FilterAshevillePattrnMono,Asheville Pattrn,Moog MuRF
+HD2_FilterAshevillePattrnStereo,Asheville Pattrn,Moog MuRF
+HD2_FilterMutantFilterMono,Mutant Filter,Mu-Tron III
+HD2_FilterMutantFilterStereo,Mutant Filter,Mu-Tron III
+HD2_FilterMysterFilterMono,Mystery Filter,Korg A3
+HD2_FilterMysterFilterStereo,Mystery Filter,Korg A3
+HD2_FM4ObiWah,Obi Wah,Oberheim S&H
+HD2_FM4Seeker,Seeker,Z Vex Seek Wah
+HD2_FM4SpinCycle,Spin Cycle,Anderton AntiWah
+HD2_FM4Throbber,Throbber,Electrix FiltFac
+HD2_FM4TronDown,Tron Down,Mu-Tron III Down
+HD2_FM4TronUp,Tron Up,Mu-Tron III Up
+HD2_FM4VTron,V Tron,Mu-Tron 3 (new)
+HD2_Rotary122RotaryStereo,122 Rotary,Leslie 122
+HD2_Rotary145RotaryStereo,145 Rotary,Leslie 145 (new)
+HD2_Tremolo60sBiasTremMono,60s Bias Trem,AC15 Trem (new)
+HD2_Tremolo60sBiasTremStereo,60s Bias Trem,AC15 Trem (new)
+HD2_Chorus70sChorusMono,70s Chorus,Boss CE-1 (new)
+HD2_Chorus70sChorusStereo,70s Chorus,Boss CE-1 (new)
+HD2_M1380AFlanger,80A Flanger,A/DA Flanger new
+HD2_M13ACFlanger,AC Flanger,MXR Flanger
+HD2_MM4AnalogChorus,Analog Chorus,Boss CE-1
+HD2_MM4AnalogFlanger,Analog Flanger,MXR Flngr (new)
+HD2_MM4BiasTremolo,Bias Tremolo,Vox AC15 Trem
+HD2_TremoloPatternMono,Bleat Chop Trem,Goatkeeper Chop
+HD2_TremoloPatternStereo,Bleat Chop Trem,Goatkeeper Chop
+HD2_VibratoBubbleVibratoMono,Bubble Vibrato,Boss VB-2
+HD2_VibratoBubbleVibratoStereo,Bubble Vibrato,Boss VB-2
+HD2_FlangerCourtesanFlangeMono,Courtesan Flange,EHX Deluxe EM
+HD2_FlangerCourtesanFlangeStereo,Courtesan Flange,EHX Deluxe EM
+HD2_MM4Dimension,Dimension,Dimension D
+HD2_MM4DualPhaser,Dual Phaser,Mu-Tron Bi-Phase
+HD2_FlangerGrayFlangerMono,Gray Flanger,MXR 117 Flngr
+HD2_FlangerGrayFlangerStereo,Gray Flanger,MXR 117 Flngr
+HD2_FlangerHarmonicFlangerMono,Harmonic Flanger,A/DA Harmonic
+HD2_FlangerHarmonicFlangerStereo,Harmonic Flanger,A/DA Harmonic
+HD2_MM4JetFlanger,Jet Flanger,A/DA Flanger
+HD2_TremoloOpticalTremMono,Optical Trem,Fender Opto Trem
+HD2_TremoloOpticalTremStereo,Optical Trem,Fender Opto Trem
+HD2_MM4OptoTremolo,Opto Tremolo,Deluxe Opto Trem
+HD2_MM4PannedPhaser,Panned Phaser,Flying Pan
+HD2_MM4PatternTrem,Pattern Tremolo,Goatkeeper
+HD2_PhaserPebblePhaserMono,Pebble Phaser,EHX Small Stone
+HD2_PhaserPebblePhaserStereo,Pebble Phaser,EHX Small Stone
+HD2_MM4Phaser,Phaser,MXR Phase 90 new
+HD2_MM4PitchVibrato,Pitch Vibrato,Boss VB-2 (new)
+HD2_ChorusPlastiChorusMono,PlastiChorus,Arion SCH-Z Mod
+HD2_ChorusPlastiChorusStereo,PlastiChorus,Arion SCH-Z Mod
+HD2_MM4RotaryDrum,Rotary Drum,Fender Vibratone
+HD2_MM4RotaryDrumHorn,Rotary Drum/Horn,Leslie 145
+HD2_PhaserScriptModPhaseMono,Script Mod Phase,Phase 90 Script
+HD2_PhaserScriptModPhaseStereo,Script Mod Phase,Phase 90 Script
+HD2_MM4ScriptPhase,Script Phase,MXR Phase 90
+HD2_TremoloTremoloMono,Tremolo,Boss PN-2 Trem
+HD2_TremoloTremoloStereo,Tremolo/Autopan,Boss PN-2
+HD2_MM4TriChorus,Tri Chorus,Tri-Stereo Chor
+HD2_ChorusTrinityChorusStereo,Trinity Chorus,TriStereo (new)
+HD2_Rotary3RotorStereo,Triple Rotary,Yamaha RA-200
+HD2_MM4UVibe,U-Vibe,Uni-Vibe (new)
+HD2_PhaserUbiquitousVibeMono,Ubiquitous Vibe,Uni-Vibe
+HD2_PhaserUbiquitousVibeStereo,Ubiquitous Vibe,Uni-Vibe
+HD2_RotaryVibeRotaryStereo,Vibe Rotary,Vibratone (new)
+HD2_DM4BassOctaver,Bass Octaver,EBS OctaBass
+VIC_PitchBoctaverMono,Boctaver,Boss OC-2
+VIC_PitchBoctaverStereo,Boctaver,Boss OC-2
+HD2_PitchPitchWhamMono,Pitch Wham,Digitech Whammy
+HD2_PitchPitchWhamStereo,Pitch Wham,Digitech Whammy
+HD2_M13TwoVoiceHarmony,Smart Harmony,H3000 Smart
+HD2_PitchTwinHarmonyMono,Twin Harmony,H3000 Twin
+HD2_PitchTwinHarmonyStereo,Twin Harmony,H3000 Twin
+HD2_PreampAguaSledge,Agua Sledge,Aguilar Hammer
+HD2_AmpAguaSledge,Agua Sledge,Aguilar Hammer
+HD2_PreampVintagePre,Studio Tube Pre,Requisite Y7
+HD2_FM4AttackSynth,Attack Synth,Korg X911
+HD2_FM4SynthString,Synth String,Roland GR700
+HD2_WahChromeMono,Chrome,Vox V847
+HD2_WahChromeStereo,Chrome,Vox V847
+HD2_WahChromeCustomMono,Chrome Custom,Vox V847 Mod
+HD2_WahChromeCustomStereo,Chrome Custom,Vox V847 Mod
+HD2_WahColorfulMono,Colorful,Colorsound Wah
+HD2_WahColorfulStereo,Colorful,Colorsound Wah
+HD2_WahConductorMono,Conductor,Boomerang
+HD2_WahConductorStereo,Conductor,Boomerang
+HD2_WahFasselMono,Fassel,Cry Baby Super
+HD2_WahFasselStereo,Fassel,Cry Baby Super
+HD2_WahTeardrop310Mono,Teardrop 310,Cry Baby 310
+HD2_WahTeardrop310Stereo,Teardrop 310,Cry Baby 310
+HD2_WahThroatyMono,Throaty,RMC Real McCoy 1
+HD2_WahThroatyStereo,Throaty,RMC Real McCoy 1
+HD2_WahUKWah846Mono,UK Wah 846,Vox V846
+HD2_WahUKWah846Stereo,UK Wah 846,Vox V846
+HD2_WahWeeperMono,Weeper,Arbiter Cry Baby
+HD2_WahWeeperStereo,Weeper,Arbiter Cry Baby

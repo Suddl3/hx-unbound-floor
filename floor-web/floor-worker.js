@@ -3,15 +3,17 @@
 // without the simulator check (minutes here), then compares the result's MD5 with the build that
 // was tested on a Helix Floor: a match means these are exactly those bytes.
 //
-// In:  { stock: ArrayBuffer }
+// In:  { stock: ArrayBuffer, names: boolean }   (names: real-gear model names, opt-in)
 // Out: { type: "progress", step, of, text } | { type: "log", text }
-//      { type: "done", file, bytes: ArrayBuffer, md5, pinned } | { type: "error", text }
+//      { type: "done", file, bytes: ArrayBuffer, md5, names, pinned }   (pinned: the tested build; never with names) | { type: "error", text }
 "use strict";
 
 var PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/";
 var STOCK_MD5 = "805caa03e8a30fd6ff7892f32ed5a9f4";   // Helix_Floor_v3.80.0_0x7d01f5efb.hxf
 var BUILT_MD5 = "f4338695c5fa965f9100a0d82e632b7e";   // NAM2 (NOMASK kernel, DSP cost 3600), tested on a unit
 var OUT_NAME = "Helix_Floor_v3.80.0_NAM2.hxf";
+var OUT_NAME_NAMES = "Helix_Floor_v3.80.0_NAM2_NAMES.hxf";
+var NAMES_CSV = "helix-floor/names/real_names.csv";   // only fetched when the page asks for real names
 
 // What the build reads, relative to the repository root (the page sits in floor-web/).
 var SOURCES = [
@@ -86,7 +88,7 @@ async function boot() {
   py.runPython(DRIVER);
 }
 
-async function build(stock) {
+async function build(stock, names) {
   var OF = 8;
   progress(1, OF, "Loading Python and the build tools (first time: about a minute)");
   if (!py) await boot();
@@ -94,6 +96,14 @@ async function build(stock) {
   var md5 = py.globals.get("md5");
   py.FS.mkdirTree("/work");
   py.FS.writeFile("/work/stock.hxf", new Uint8Array(stock));
+  if (names) {                      // stage_main reads NAM_NAMES: internal,floor_name,real_name
+    var nr = await fetch("../" + NAMES_CSV);
+    if (!nr.ok) throw new Error("Could not load " + NAMES_CSV + " (" + nr.status + ")");
+    py.FS.writeFile("/work/names.csv", new Uint8Array(await nr.arrayBuffer()));
+    py.runPython("os.environ['NAM_NAMES'] = '/work/names.csv'");
+  } else {
+    py.runPython("os.environ.pop('NAM_NAMES', None)");
+  }
   progress(2, OF, "Checking your stock file");
   var got = md5("/work/stock.hxf");
   if (got !== STOCK_MD5) {
@@ -122,9 +132,10 @@ async function build(stock) {
   var bytes = py.FS.readFile("/work/out.hxf");
   ["/work/out.hxf", s[4], "/work/stock.hxf"].forEach(function (p) { try { py.FS.unlink(p); } catch (e) { } });
   var buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  post({ type: "done", file: OUT_NAME, bytes: buf, md5: out, pinned: out === BUILT_MD5 }, [buf]);
+  post({ type: "done", file: names ? OUT_NAME_NAMES : OUT_NAME, bytes: buf, md5: out, names: !!names,
+         pinned: !names && out === BUILT_MD5 }, [buf]);
 }
 
 self.onmessage = function (ev) {
-  build(ev.data.stock).catch(function (err) { post({ type: "error", text: String(err && err.message || err) }); });
+  build(ev.data.stock, !!ev.data.names).catch(function (err) { post({ type: "error", text: String(err && err.message || err) }); });
 };

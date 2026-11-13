@@ -83,6 +83,7 @@ pre { background: var(--code); padding: 10px; border-radius: 6px; overflow-x: au
     <h2><span class="num">2</span>Build your firmware</h2>
     <p class="sub">Pick the stock file. The page builds the NAM firmware and checks it is byte-for-byte the build that was tested on a Helix Floor. Takes a few minutes; keep this tab open.</p>
     <div class="row noprint"><input type="file" id="stock" accept=".hxf"><button id="buildBtn" disabled>Build</button></div>
+    <label class="noprint"><input type="checkbox" id="realNames"> Show real-gear names for the amps, cabs and effects (optional, off by default). Text only: presets and sound are unchanged, but the file is then not byte-for-byte the tested build.</label>
     <progress id="prog" value="0" max="8" hidden></progress>
     <div class="status" id="buildStatus"></div>
     <div class="row" id="dlRow" hidden><a class="btn" id="dlLink" download>Download the firmware</a><span id="dlMd5" class="muted"></span></div>
@@ -176,7 +177,7 @@ var prog = document.getElementById("prog"), bst = document.getElementById("build
 var worker = null;
 stock.addEventListener("change", function () { buildBtn.disabled = !stock.files.length; });
 buildBtn.addEventListener("click", async function () {
-  buildBtn.disabled = true; stock.disabled = true; prog.hidden = false; prog.value = 0; logEl.textContent = "";
+  buildBtn.disabled = true; stock.disabled = true; document.getElementById("realNames").disabled = true; prog.hidden = false; prog.value = 0; logEl.textContent = "";
   document.getElementById("dlRow").hidden = true;
   bst.className = "status"; bst.textContent = "Starting...";
   var buf = await stock.files[0].arrayBuffer();
@@ -185,20 +186,21 @@ buildBtn.addEventListener("click", async function () {
     var m = ev.data;
     if (m.type === "progress") { prog.value = m.step; bst.textContent = "Step " + m.step + " of " + m.of + ": " + m.text + "..."; }
     else if (m.type === "log") { logEl.textContent += m.text; }
-    else if (m.type === "error") { bst.className = "status bad"; bst.textContent = m.text; buildBtn.disabled = false; stock.disabled = false; }
+    else if (m.type === "error") { bst.className = "status bad"; bst.textContent = m.text; buildBtn.disabled = false; stock.disabled = false; document.getElementById("realNames").disabled = false; }
     else if (m.type === "done") {
       prog.value = prog.max;
       var url = URL.createObjectURL(new Blob([m.bytes], { type: "application/octet-stream" }));
       var a = document.getElementById("dlLink"); a.href = url; a.download = m.file;
       document.getElementById("dlMd5").textContent = "MD5 " + m.md5;
       document.getElementById("dlRow").hidden = false;
-      bst.className = "status " + (m.pinned ? "ok" : "bad");
-      bst.textContent = m.pinned ? "Done. This is exactly the build that was tested on a Helix Floor."
+      bst.className = "status " + (m.pinned || m.names ? "ok" : "bad");
+      bst.textContent = m.names ? "Done, with real-gear names. Only the model names differ from the tested build."
+        : m.pinned ? "Done. This is exactly the build that was tested on a Helix Floor."
         : "Built, but it differs from the tested build. Don't install it; please report this.";
-      buildBtn.disabled = false; stock.disabled = false;
+      buildBtn.disabled = false; stock.disabled = false; document.getElementById("realNames").disabled = false;
     }
   };
-  worker.postMessage({ stock: buf }, [buf]);
+  worker.postMessage({ stock: buf, names: document.getElementById("realNames").checked }, [buf]);
 });
 
 // ---------- convert + slot map

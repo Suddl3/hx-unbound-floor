@@ -3,8 +3,10 @@
 The Floor build can show your own names for the stock amps, cabs and effects instead of Line 6's. Text only:
 model ids, presets and code are unchanged.
 
-This repository ships only the mechanism and a neutral example (`helix-floor/names/names.example.csv`).
-It does not ship a list of real-gear names; make your own list locally.
+The repository ships the mechanism, a neutral example (`helix-floor/names/names.example.csv`) and one ready-made
+list, `helix-floor/names/real_names.csv` (533 models, drafted from Line 6's public "Based on" list). The browser
+builder (`floor-web/`) has an unchecked box, "Show real-gear names", that builds with that list. For a local build,
+point `NAM_NAMES` at it, or at your own copy. Real-gear names are third-party product names: see `NOTICE`.
 
 ## Use
 
@@ -43,7 +45,7 @@ python helix-floor/names/draft_names.py --stock my_names/models_stock.csv --base
    characters, duplicates, non-ASCII). Models without a match, and Line 6 originals, keep their names.
    `overrides.csv` (`floor_name,real_name`) is optional and wins over the draft.
 
-This repository does not ship a list of real-gear names, the model dump or Line 6's page.
+The scripts ship no data of their own; `real_names.csv` is what they produced for firmware 3.80.0.
 
 ## Cost labels (experiment)
 
