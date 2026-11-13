@@ -10,8 +10,9 @@ to the view registrar (0x28093592), is pointed at dm_paint, which wipes the labe
 and then draws the labels.
 
 m4/floor_dsp_meter.s is assembled with zig's clang (pip install ziglang): `python dsp_meter.py --assemble` writes
-m4/floor_dsp_meter.bin and m4/floor_dsp_meter.json (symbol offsets). (*.bin is gitignored here, as the mirror's: a fresh
-checkout runs --assemble once.)
+m4/floor_dsp_meter.bin after checking m4/floor_dsp_meter.json (symbol offsets). Both are committed so a build needs no
+assembler. `--check` verifies a fresh assembly against both files without changing them; `--assemble --update-symbols`
+explicitly accepts a reviewed source change that moves the symbol offsets (as screen_mirror.py).
 """
 import json
 import os
@@ -51,15 +52,26 @@ STOCK = (
 )
 
 
-def assemble():
-    """m4/floor_dsp_meter.s -> .bin + .json, with zig's clang."""
+def assemble(*, check=False, update_symbols=False):
+    """Assemble in temporary files; validate the symbol layout before publishing."""
     with tempfile.TemporaryDirectory() as d:
+        source = os.path.join(d, "m.s")
         obj = os.path.join(d, "m.o")
+        binary = os.path.join(d, "m.bin")
+        with open(SRC, "rb") as f:
+            source_bytes = f.read()
+        with open(source, "wb") as f:
+            f.write(source_bytes)
         zig = [sys.executable, "-m", "ziglang"]
-        subprocess.run(zig + ["cc", "-target", "thumb-freestanding-eabi", "-mcpu=cortex_m4", "-c", SRC, "-o", obj],
-                       check=True)
-        subprocess.run(zig + ["objcopy", "-O", "binary", "-j", ".text", obj, BIN], check=True)
-        b = open(obj, "rb").read()
+        env = dict(os.environ, ZIG_LOCAL_CACHE_DIR=os.path.join(d, "local-cache"),
+                   ZIG_GLOBAL_CACHE_DIR=os.path.join(d, "global-cache"))
+        subprocess.run(zig + ["cc", "-target", "thumb-freestanding-eabi", "-mcpu=cortex_m4", "-c", source, "-o", obj],
+                       check=True, timeout=60, env=env)
+        subprocess.run(zig + ["objcopy", "-O", "binary", "-j", ".text", obj, binary], check=True, timeout=60, env=env)
+        with open(obj, "rb") as f:
+            b = f.read()
+        with open(binary, "rb") as f:
+            code = f.read()
     shoff, = struct.unpack_from("<I", b, 0x20)
     ent, num, _ = struct.unpack_from("<HHH", b, 0x2e)
     secs = [struct.unpack_from("<10I", b, shoff + i * ent) for i in range(num)]
@@ -72,9 +84,22 @@ def assemble():
                 name = b[st[4] + nm:].split(b"\0")[0].decode()
                 if name.startswith("dm_"):
                     syms[name] = val & ~1
-    with open(SYMS, "w") as f:
-        json.dump(dict(sorted(syms.items())), f, indent=1)
-    return open(BIN, "rb").read(), syms
+    syms = dict(sorted(syms.items()))
+    with open(SYMS) as f:
+        expected = json.load(f)
+    if syms != expected and (check or not update_symbols):
+        raise ValueError("Assembled DSP meter symbols differ from the committed map; review before --update-symbols.")
+    if check:
+        with open(BIN, "rb") as f:
+            if f.read() != code:
+                raise ValueError("Assembled DSP meter bytes differ from the committed binary.")
+    else:
+        with open(BIN, "wb") as f:
+            f.write(code)
+        if syms != expected:
+            with open(SYMS, "w") as f:
+                json.dump(syms, f, indent=1)
+    return code, syms
 
 
 def load():
@@ -123,6 +148,6 @@ def apply(im, code_va, syms):
 
 
 if __name__ == "__main__":
-    if "--assemble" in sys.argv:
-        code, syms = assemble()
+    if "--assemble" in sys.argv or "--check" in sys.argv:
+        code, syms = assemble(check="--check" in sys.argv, update_symbols="--update-symbols" in sys.argv)
         print(len(code), "bytes;", syms)

@@ -47,6 +47,8 @@ def hook(uc, addr, size, _):
     name = ADDR.get(addr & ~1)
     if not name:
         return
+    if name != "TEXT_REST":             # (the value-text trampoline's continuation is mid-function, not a call)
+        assert r(UC_ARM_REG_SP) % 8 == 0, f"stack is not 8-byte aligned at {name}"
     a0, a1 = r(UC_ARM_REG_R0), r(UC_ARM_REG_R1)
     if name == "STOCK_PAINT":
         assert a1 == VIEW and a0 in (FB0, FB1)
