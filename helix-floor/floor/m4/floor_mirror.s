@@ -18,6 +18,7 @@
 
 .equ CMD, 0x52
 .equ CMD_INPUT, 0x51                @ remote input: a UI event packed in the request's seq (fm_input)
+.equ CMD_PEEK, 0x53                 @ the next frames read memory, not the screen: seq (15 bits) << 17 is the address, 0 = the screen (fm_peekset)
 .equ POST, 0x2808b669               @ (event): the UI's event post, every listener of the event's class called directly
 .equ SERVICE, 6
 .equ W, 800
@@ -82,6 +83,13 @@ fm_register:
     orr r0, r0, #1
     str r0, [sp, #4]
     movs r0, #CMD_INPUT
+    add r1, sp, #4
+    ldr r3, =REGISTER
+    blx r3
+    adr r0, fm_peekset
+    orr r0, r0, #1
+    str r0, [sp, #4]
+    movs r0, #CMD_PEEK
     add r1, sp, #4
     ldr r3, =REGISTER
     blx r3
@@ -181,6 +189,19 @@ fi_reply:                           @ {0x66: seq, 0x67: 0, 0x68: 0}, as fm_cmd's
     add sp, #16
     pop {r4-r7, r10, pc}
 
+@ fm_peekset: CMD_PEEK. Sets the window the frame command reads (fm_peek) and replies as fm_input does. The host asks for
+@ frames as before; each is 480 rows of 1600 bytes from that address (the first request after a change gets every row).
+fm_peekset:                         @ r0 the editor's stream, r1 the request -> r0 the stream's result
+    push {r4-r7, r10, lr}
+    sub sp, #16
+    mov r10, r0
+    ldrh r4, [r1, #0xc]
+    ubfx r0, r4, #0, #15
+    lsls r0, r0, #17
+    adr r3, fm_peek
+    str r0, [r3]
+    b fi_reply
+
 fm_cmd:                             @ r0 the editor's stream, r1 the request -> r0 the stream's result
     push {r4-r11, lr}
     sub sp, #28                     @ 36 saved + 28 local = 64 bytes: keep external calls 8-byte aligned
@@ -211,6 +232,12 @@ fm_fb0:
     ldr r4, =FB0
 fm_fb_ok:
     bic r4, r4, #7
+    adr r3, fm_peek
+    ldr r0, [r3]
+    cbz r0, fm_screen
+    mov r4, r0                      @ memory, not the screen
+    movs r11, #1                    @ every row: the hashes are of the screen
+fm_screen:
     str r4, [sp, #20]
     ldr r3, =CLOCK
     blx r3
@@ -409,6 +436,8 @@ fm_write:                           @ r1 bytes, r2 how many: to the stream r10
 .ltorg
 .align 2
 fm_seq:
+    .space 4
+fm_peek:
     .space 4
 fm_trailer:
     .space TRAILER

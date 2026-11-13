@@ -165,7 +165,8 @@ assert names[:4] == ["REGALL_A", "REGALL_B", "REGALL_REST", "REGISTER"], names
 regs = [x for x in log if isinstance(x, tuple) and x[0] == "reg"]
 assert regs[0][1] == 0x52 and regs[0][2] == ((CAVE + sym("fm_cmd")) | 1, 0x280f77fd, 0), regs
 assert regs[1][1] == 0x51 and regs[1][2] == ((CAVE + sym("fm_input")) | 1, 0x280f77fd, 0), regs
-assert len(regs) == 2
+assert regs[2][1] == 0x53 and regs[2][2] == ((CAVE + sym("fm_peekset")) | 1, 0x280f77fd, 0), regs
+assert len(regs) == 3
 print("registration: OK")
 
 # 2. first request: every row, equal to the frame
@@ -196,6 +197,20 @@ assert fb == FB1 and all(got[i] == frame2[i * ROW:(i + 1) * ROW] for i in rows) 
 mu.mem_write(LCD + 0x10, struct.pack("<I", 0))
 assert request(1)[0] == FB0
 print("frame address: OK")
+
+# 2b. CMD 0x53 (fm_peekset): the next frames read memory from seq << 17; 0 goes back to the screen
+def peekset(seq):
+    req = 0x20003000
+    mu.mem_write(req, bytes(12) + struct.pack("<H", seq))
+    out.clear()
+    del log[:]
+    assert call("fm_peekset", STREAM, req) == 0x55 and "done" in log
+
+peekset(0x1400)                                   # 0x1400 << 17 = 0x28000000
+assert request(1)[0] == 0x28000000 and request(2)[0] == 0x28000000
+peekset(0)
+assert request(1)[0] == FB0
+print("peek window: OK")
 
 
 def press(seq):
