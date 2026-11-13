@@ -1,7 +1,9 @@
 @ floor_dsp_meter.s - Helix Floor DSP meter, ported from HXtra's dsp_meter.s (wisemandenny/hxtra, GPL-3.0).
 @ The home view shows each block's DSP cost in whole per cent under its icon, in grey, and each path's blocks' sum against
 @ what blocks may use on its DSP (90% less the firmware's fixed 15%) as "P1 used/75" and "P2 used/75", in white, in the
-@ title bar left of the snapshot icon (the paths' own ends move with the layout: a full path 2 lifts its output).
+@ title bar left of the snapshot icon (the paths' own ends move with the layout: a full path 2 lifts its output), or as
+@ "Pn" and a bar (green, yellow, red). Global Settings > Preferences page 2 sets them: DSP Meter / Blocks (Off/On, ID 74)
+@ and DSP Meter / Paths (Off/Numbers/Meters, ID 122); dm_text gives their value strings.
 @ The costs are the firmware's own declared ones (hundredths of a per cent), not measured load.
 @
 @ dm_paint takes the home view's paint function pointer (the literal 0x2809372c, which the boot registers at 0x28093592):
@@ -14,8 +16,13 @@
 @ 8..15 row B, as the layout 0x280d38a0 places them); block record 16 p + k in the DSP model (the ID map 0x2813dfc2).
 .syntax unified
 .thumb
+.fpu fpv4-sp-d16
 
 .equ STOCK_PAINT, 0x280d6be9        @ the home view's paint (fb, view)
+.equ GET_VALUE, 0x28150829          @ (id, out): a Global Setting, value at out + 4
+.equ ID_BLOCKS, 74                  @ Preferences "DSP Meter / Blocks": a spare main-store ID, stock limits int 0..1, default 1
+.equ ID_PATHS, 122                  @ Preferences "DSP Meter / Paths": spare, stock limits int 0..2, default 1
+.equ TEXT_REST, 0x280941c9          @ the value-text function (id, value, out, size) after its first 8 bytes
 .equ DSP_MODEL, 0x284e5758          @ -> the DSP model: block records of 0x54 bytes at +0x14, 32 of them
 .equ DSP_LOCK, 0x2813e63d           @ (0): its lock (mutex at model + 8), as the stock lookups take it
 .equ DSP_UNLOCK, 0x2813e655
@@ -43,6 +50,13 @@
 .equ VALID, 0x80000000              @ a label: value | left << 10 | top << 20 | PATH2 | TOTAL | VALID
 .equ TOTAL, 0x40000000
 .equ PATH2, 0x20000000
+.equ METER, 0x200                  @ a total's value bit 9: drawn as "Pn" and a bar (value then 0..511)
+.equ BAR_X, 20                      @ the bar after "Pn"
+.equ BAR_W, 50
+.equ GREEN, 0x0300                  @ RGB555 (0, 24, 0): up to 60% of the 75
+.equ YELLOW, 0x7f00                 @ (31, 24, 0): to 90%
+.equ RED, 0x7c00                    @ (31, 0, 0)
+.equ EDGE, 0x4210                   @ (16, 16, 16)
 .equ G_SLASH, 10                    @ glyphs past the digits
 .equ G_P, 11
 .equ G_SPACE, 12
@@ -53,6 +67,31 @@ dm_paint:                           @ r0 the frame, r1 the home view
     sub sp, #140                    @ 0 the 32 records' costs (-1 none), 128 the stock's result, 132 the model
     mov r4, r0
     mov r5, r1
+    adr.w r6, dm_cfg                @ the two Preferences settings, as stored now (a failed read keeps the last)
+    movs r0, #ID_BLOCKS
+    add r1, sp, #128
+    ldr r3, =GET_VALUE
+    blx r3
+    cmp r0, #0
+    blt dm_cfg_paths
+    ldr r0, [sp, #132]
+    cmp r0, #0
+    it ne
+    movne r0, #1
+    strb r0, [r6]
+dm_cfg_paths:
+    movs r0, #ID_PATHS
+    add r1, sp, #128
+    ldr r3, =GET_VALUE
+    blx r3
+    cmp r0, #0
+    blt dm_cfg_read
+    ldr r0, [sp, #132]
+    cmp r0, #2
+    it hi
+    movhi r0, #2
+    strb r0, [r6, #1]
+dm_cfg_read:
     movs r6, #0
     mvn r0, #0
 dm_none:
@@ -91,6 +130,10 @@ dm_item:
     movs r10, #0                    @ the label this buffer should have
     cmp r6, #32
     bhs dm_total
+    adr.w r0, dm_cfg
+    ldrb r0, [r0]
+    cmp r0, #0
+    beq dm_place                    @ block labels off
     ldr.w r11, [sp, r6, lsl #2]
     cmp r11, #0
     blt dm_place
@@ -146,6 +189,10 @@ dm_total:                           @ path i - 32: its blocks' sum, each rounded
     ldr r0, [sp, #132]
     cmp r0, #0
     beq dm_place                    @ no model: none
+    adr.w r0, dm_cfg
+    ldrb r0, [r0, #1]
+    cmp r0, #0
+    beq dm_place                    @ path totals off
     sub.w r0, r6, #32
     lsls r7, r0, #4
     add.w r8, r7, #16
@@ -162,6 +209,17 @@ dm_summed:
     adds r7, #1
     cmp r7, r8
     bne dm_sum
+    adr.w r0, dm_cfg
+    ldrb r0, [r0, #1]
+    cmp r0, #2
+    bne dm_numbers
+    cmp r11, #0xff                  @ meters: "Pn" and a bar, the slot's whole width (the bar stops at 75)
+    it hi
+    movhi r11, #0xff
+    orr r11, r11, #METER
+    movs r0, #TOTAL_WIDE
+    b dm_wide
+dm_numbers:
     movw r0, #999
     cmp r11, r0
     it hi
@@ -171,6 +229,7 @@ dm_summed:
     adds r0, #6                     @ "Pn " and "/75"
     lsls r0, r0, #3
     subs r0, #SCALE
+dm_wide:
     cmp r6, #32
     ite eq
     moveq r3, #TOTAL_RIGHT0
@@ -261,6 +320,8 @@ label:                              @ r0 a label, r1 0 to wipe it (black), 1 to 
     moveq r3, #1
     movne r3, #2
     strb r3, [r0], #1
+    tst r5, #METER
+    bne lb_counted                  @ a meter: "Pn" and its bar
     movs r3, #G_SPACE
     strb r3, [r0], #1
 lb_value:
@@ -292,6 +353,7 @@ lb_move:                            @ r7 the first digit
     movs r3, #5
     strb r3, [r0], #1
 lb_counted:
+    str r5, [sp, #12]               @ the label (the digits' scratch is free now)
     mov r7, sp
     subs r7, r0, r7                 @ glyphs
     ubfx r8, r5, #10, #10           @ left
@@ -302,6 +364,12 @@ lb_counted:
     mov r1, r9
     lsls r2, r7, #3
     subs r2, #SCALE
+    tst r5, #TOTAL
+    beq lb_wipe
+    tst r5, #METER
+    it ne
+    movne r2, #TOTAL_WIDE           @ a meter: its bar too
+lb_wipe:
     movs r3, #TALL
     bl fill
     b lb_out
@@ -338,6 +406,60 @@ lb_off:
     adds r6, #1
     cmp r6, r7
     bne lb_glyph
+    ldr r5, [sp, #12]
+    tst r5, #TOTAL
+    beq lb_out
+    tst r5, #METER
+    beq lb_out
+    add r8, r8, #BAR_X              @ the bar: an edge, black inside, filled to used/75 in green, yellow or red
+    movw r10, #EDGE
+    mov r0, r8
+    mov r1, r9
+    movs r2, #BAR_W
+    movs r3, #1
+    bl fill
+    mov r0, r8
+    add r1, r9, #(TALL - 1)
+    movs r2, #BAR_W
+    movs r3, #1
+    bl fill
+    mov r0, r8
+    mov r1, r9
+    movs r2, #1
+    movs r3, #TALL
+    bl fill
+    add r0, r8, #(BAR_W - 1)
+    mov r1, r9
+    movs r2, #1
+    movs r3, #TALL
+    bl fill
+    movs r10, #0
+    add r0, r8, #1
+    add r1, r9, #1
+    movs r2, #(BAR_W - 2)
+    movs r3, #(TALL - 2)
+    bl fill
+    ubfx r11, r5, #0, #9
+    cmp r11, #BUDGET
+    it hi
+    movhi r11, #BUDGET
+    movw r10, #GREEN
+    cmp r11, #45                    @ 60% of 75
+    blo lb_colour
+    movw r10, #YELLOW
+    cmp r11, #68                    @ 90%
+    it hs
+    movwhs r10, #RED
+lb_colour:
+    movs r2, #(BAR_W - 2)
+    mul r2, r11, r2
+    movs r1, #BUDGET
+    udiv r2, r2, r1
+    cbz r2, lb_out
+    add r0, r8, #1
+    add r1, r9, #1
+    movs r3, #(TALL - 2)
+    bl fill
 lb_out:
     add sp, #16
     pop {r5-r11, pc}
@@ -360,12 +482,60 @@ fill_px:
     pop {r5, r6}
     bx lr
 
+.thumb_func
+dm_text:                            @ the value-text function's start (trampoline): our two settings' strings, else stock
+    cmp r0, #ID_BLOCKS
+    beq dt_blocks
+    cmp r0, #ID_PATHS
+    beq dt_paths
+    push.w {r4, r5, r6, r7, r8, r9, lr}  @ the 8 bytes the trampoline covers
+    vpush {d8}
+    ldr r12, =TEXT_REST             @ (r12 is free at a call)
+    bx r12
+dt_blocks:
+    adr.w r12, dt_onoff
+    ldr r0, [r1, #4]
+    cmp r0, #1
+    it hi
+    movhi r0, #1
+    b dt_copy
+dt_paths:
+    adr.w r12, dt_modes
+    ldr r0, [r1, #4]
+    cmp r0, #2
+    it hi
+    movhi r0, #2
+dt_copy:                            @ r12 + 8 value: the string (8 bytes, NUL padded) into out, at most size - 1 and a NUL
+    add.w r12, r12, r0, lsl #3
+    subs r3, #1
+    blt dt_done
+dt_char:
+    cbz r3, dt_end
+    ldrb r0, [r12], #1
+    cbz r0, dt_end
+    strb r0, [r2], #1
+    subs r3, #1
+    b dt_char
+dt_end:
+    movs r0, #0
+    strb r0, [r2]
+dt_done:
+    movs r0, #0
+    bx lr
+
 .ltorg
+.balign 4
+dt_onoff:
+    .ascii "Off\0\0\0\0\0On\0\0\0\0\0\0"
+dt_modes:
+    .ascii "Off\0\0\0\0\0Numbers\0Meters\0\0"
 .balign 2
 dm_font:                            @ 3x5 glyphs, bit 14 the top left cell, rows of 3 bits: 0..9, '/', 'P', ' '
     .hword 0b111101101101111, 0b010110010010111, 0b111001111100111, 0b111001111001111, 0b101101111001001
     .hword 0b111100111001111, 0b111100111101111, 0b111001001001001, 0b111101111101111, 0b111101111001111
     .hword 0b001001010100100, 0b111101111100100, 0
 .balign 4
+dm_cfg:                             @ block labels 0 off / 1 on; path totals 0 off / 1 numbers / 2 meters (the settings' defaults until read)
+    .byte 1, 1, 0, 0
 dm_track:                           @ the labels each framebuffer has (FB0's, then the other's)
     .space NTRACK * 4 * 2

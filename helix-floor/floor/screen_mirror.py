@@ -1,9 +1,10 @@
 """Screen mirror for the Helix Floor (env NAM_SCREEN_MIRROR=1), ported from HXtra's screen_mirror
 (wisemandenny/hxtra, GPL-3.0).
 
-HX Edit's editor service gets one more command, 0x52 (free on the Floor as on the Stomp): its reply holds the LCD
-rows that changed since the last reply (m4/floor_mirror.s). auto/floor_mirror.py shows or saves the screen on a PC.
-Nothing changes on the unit's own screen or sound.
+HX Edit's editor service gets two more commands (free on the Floor as on the Stomp): 0x52, whose reply holds the LCD
+rows that changed since the last reply, and 0x51, which posts a key press or knob turn packed in its seq to the UI, as
+the front panel would (m4/floor_mirror.s fm_input). auto/floor_mirror.py shows or saves the screen on a PC,
+auto/floor_input.py presses and turns. Nothing changes on the unit's own screen or sound until a 0x51 comes.
 
 The code goes in the local-SRAM cave (stage_main). The editor's command registrations (0x280ee594, called once at
 boot) get an 8-byte trampoline to fm_regall, which runs them and then registers 0x52.
@@ -45,6 +46,7 @@ STOCK = (
     (0x280f0528, "034b044a", "the registrations' first call"),
     (0x280f01a4, "10b584b0", "the registrations' second call"),
     (0x280ee59e, "01f013fe", "where the registrations go on after the trampoline (bl 0x280f01c8)"),
+    (0x2808b668, "f8b505461148124e", "the UI's event post (push {r3-r7, lr}; mov r5, r0; ldr r0, =mutex; ldr r6, =lists)"),
 )
 
 

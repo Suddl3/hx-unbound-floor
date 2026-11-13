@@ -7,7 +7,7 @@ import struct
 import sys
 
 from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_CODE
-from unicorn.arm_const import (UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_PC,
+from unicorn.arm_const import (UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_R2, UC_ARM_REG_R3, UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_PC,
                                UC_ARM_REG_R4, UC_ARM_REG_R5, UC_ARM_REG_R6, UC_ARM_REG_R7, UC_ARM_REG_R8,
                                UC_ARM_REG_R9, UC_ARM_REG_R10, UC_ARM_REG_R11)
 
@@ -20,7 +20,7 @@ W, H = 800, 480
 FB0, FB1 = 0x285a3f50, 0x285a3f50 + 0xbb800
 VIEW, DSP, NODES, NODE0 = 0x28300000, 0x28400000, 0x28410000, 0x28420000
 STUB = dict(STOCK_PAINT=0x280d6be8, DSP_LOCK=0x2813e63c, DSP_UNLOCK=0x2813e654, WLOCK=0x2808ee38, WUNLOCK=0x2808ee44,
-            CALLER=0x20001030)
+            GET_VALUE=0x28150828, TEXT_REST=0x280941c8, CALLER=0x20001030)
 ADDR = {v: k for k, v in STUB.items()}
 FONT = [0b111101101101111, 0b010110010010111, 0b111001111100111, 0b111001111001111, 0b101101111001001,
         0b111100111001111, 0b111100111101111, 0b111001001001001, 0b111101111101111, 0b111101111001111,
@@ -36,6 +36,7 @@ for a in STUB.values():
     mu.mem_write(a, b"\x70\x47")
 log = []
 stock_line = None
+settings = {74: 1, 122: 1}              # Preferences: DSP Meter Blocks (0/1), Paths (0 off, 1 numbers, 2 meters)
 
 
 def r(reg):
@@ -54,6 +55,15 @@ def hook(uc, addr, size, _):
             uc.mem_write(a0 + 2 * (y * W + x0), struct.pack("<H", 0x4210) * (x1 - x0))
     if name in ("DSP_LOCK", "DSP_UNLOCK"):
         assert a0 == 0
+    if name == "GET_VALUE":             # (id, out): {type, value at +4}; -3 for an ID it doesn't know
+        if a0 in settings and settings[a0] is not None:
+            uc.mem_write(a1, struct.pack("<Bxxxi", 2, settings[a0]))
+            uc.reg_write(UC_ARM_REG_R0, 0)
+        else:
+            uc.reg_write(UC_ARM_REG_R0, 0xfffffffd)
+    if name == "TEXT_REST":
+        uc.emu_stop()
+        return
     if name == "CALLER":
         uc.emu_stop()
         return
@@ -96,7 +106,10 @@ def call(fb):
     assert r(UC_ARM_REG_PC) & ~1 == STUB["CALLER"], hex(r(UC_ARM_REG_PC))
     assert r(UC_ARM_REG_SP) == 0x200F0000, "stack not balanced"
     assert all(r(reg) == 0xA5A5A500 + i for i, reg in enumerate(regs)), "callee-saved register clobbered"
-    # the DSP model's lock never held with the widget lock; the stock paint after the wipes, before the labels
+    # the settings read first; the DSP model's lock never held with the widget lock; the stock paint after the wipes,
+    # before the labels
+    assert log[:2] == ["GET_VALUE", "GET_VALUE"], log
+    del log[:2]
     if "DSP_LOCK" in log:
         assert log == ["DSP_LOCK", "DSP_UNLOCK", "WLOCK", "WUNLOCK", "STOCK_PAINT"], log
     else:
@@ -171,6 +184,13 @@ block(18, 600)
 widget(1, 3, 358, 234)                 # a shown slot with no block: no label
 mu.mem_write(DSP + 0x14 + 0x54 * 19, struct.pack("<i", 0x4c))   # (a handle past the table: none)
 
+
+def cfg(blocks, paths):
+    """The two Preferences settings, as GET_VALUE gives them: block labels 0/1; path totals 0 off, 1 numbers, 2 meters."""
+    settings[74], settings[122] = blocks, paths
+
+
+cfg(1, 1)
 call(FB0)
 px = frame(FB0)
 want0 = ["8", "12", "33", "0", "0", "10", "40", "23"]
@@ -199,6 +219,83 @@ assert black(px2, 650 - 70, 24, 6, 10)        # the old total's first glyph ("P"
 assert frame(FB1) == px, "FB1 changed by FB0's paint"
 print("FB0 after a block went: its label wiped, the rest and FB1 unchanged")
 
+# meters: "Pn" and a 50 x 10 bar filled to used/75 (P1's 93 stops at 75: red, full; P2's 62: yellow, 39 of 48)
+cfg(1, 2)
+call(FB0)
+px3 = frame(FB0)
+EDGE, RED, YELLOW, GREEN = 0x4210, 0x7c00, 0x7f00, 0x0300
+for left, fill, colour in ((580, 48, RED), (666, 62 * 48 // 75, YELLOW)):
+    assert text_at(px3, left, 24, WHITE, 2) in ("P1", "P2")
+    bx = left + 20
+    assert all(px3[24 * W + x] == EDGE and px3[33 * W + x] == EDGE for x in range(bx, bx + 50))
+    assert all(px3[y * W + bx] == EDGE and px3[y * W + bx + 49] == EDGE for y in range(24, 34))
+    for y in range(25, 33):
+        row = [px3[y * W + x] for x in range(bx + 1, bx + 49)]
+        assert row == [colour] * fill + [0] * (48 - fill), (left, y, row)
+assert text_at(px3, 580, 24, WHITE, 2) == "P1" and text_at(px3, 666, 24, WHITE, 2) == "P2"
+assert black(px3, 594, 24, 6, 10) and black(px3, 680, 24, 6, 10)     # the numbers' glyphs between "Pn" and the bar wiped
+assert under(px3, 103, 126, "8") == "8"
+print("meters: P1 full red, P2 yellow 39/48, numbers wiped")
+pxm = px3
+
+# block labels off: wiped; the meters stay
+cfg(0, 2)
+call(FB0)
+px4 = frame(FB0)
+for k in (0, 1, 3, 4, 5, 6, 7):
+    assert black(px4, 103 + 85 * k - 12, 156, 24, 10), k
+assert black(px4, 103 - 12, 264, 24, 10) and black(px4, 103 - 12, 336, 24, 10)
+assert [px4[28 * W + x] for x in range(601, 649)] == [RED] * 48
+# totals off too: nothing left
+cfg(0, 0)
+call(FB0)
+left = [(i % W, i // W) for i, v in enumerate(frame(FB0)) if v and i // W != 160]   # (row 160: the mock stock line)
+assert not left, ("labels left with both settings off", left[:5])
+print("block labels off, then totals off: wiped")
+cfg(1, 2)
+
+# a failed settings read keeps the last values; out-of-range values clamp (a stored 5 on Paths reads as meters)
+call(FB0)
+settings[74] = settings[122] = None
+call(FB0)
+assert bytes(mu.mem_read(CAVE + SYMS["dm_cfg"], 2)) == bytes([1, 2])
+cfg(7, 5)
+call(FB0)
+assert bytes(mu.mem_read(CAVE + SYMS["dm_cfg"], 2)) == bytes([1, 2])
+print("settings: a failed read keeps the last, out of range clamps")
+
+
+def text(sid, value, size=32):
+    """dm_text (the value-text function's start) -> (result, the string) for our IDs."""
+    val, out = 0x20002000, 0x20002100
+    mu.mem_write(val, struct.pack("<Bxxxi", 2, value))
+    mu.mem_write(out, b"\xee" * 40)
+    mu.reg_write(UC_ARM_REG_R0, sid)
+    mu.reg_write(UC_ARM_REG_R1, val)
+    mu.reg_write(UC_ARM_REG_R2, out)
+    mu.reg_write(UC_ARM_REG_R3, size)
+    mu.reg_write(UC_ARM_REG_SP, 0x200F0000)
+    mu.reg_write(UC_ARM_REG_LR, STUB["CALLER"] | 1)
+    mu.emu_start((CAVE + SYMS["dm_text"]) | 1, 0, count=10_000)
+    pc = r(UC_ARM_REG_PC) & ~1
+    if pc == STUB["TEXT_REST"]:
+        return "stock", r(UC_ARM_REG_SP)
+    assert pc == STUB["CALLER"] and r(UC_ARM_REG_SP) == 0x200F0000
+    b = bytes(mu.mem_read(out, 40))
+    assert b"\0" in b[:size] and b[b.index(b"\0") + 1:] == b"\xee" * (39 - b.index(b"\0"))
+    return r(UC_ARM_REG_R0), b[:b.index(b"\0")].decode()
+
+
+assert [text(74, v) for v in (0, 1, 9)] == [(0, "Off"), (0, "On"), (0, "On")]
+assert [text(122, v) for v in (0, 1, 2, 3)] == [(0, "Off"), (0, "Numbers"), (0, "Meters"), (0, "Meters")]
+assert text(122, 1, size=4) == (0, "Num")
+mu.reg_write(UC_ARM_REG_R4, 0x44444444)
+res = text(73, 0)                       # another ID: the stock function, its first 8 bytes run (7 registers, d8)
+assert res == ("stock", 0x200F0000 - 36), res
+assert struct.unpack("<7I", bytes(mu.mem_read(0x200F0000 - 28, 28)))[0] == 0x44444444
+assert r(UC_ARM_REG_R0) == 73 and r(UC_ARM_REG_R2) == 0x20002100 and r(UC_ARM_REG_R3) == 32
+print("value text: Off/On, Off/Numbers/Meters, cut to size, other IDs go on to the stock function")
+
 # no DSP model (as at boot): every label goes, no lock taken
 mu.mem_write(DSP_PTR, struct.pack("<I", 0))
 call(FB1)
@@ -209,7 +306,7 @@ print("no DSP model: FB1 wiped, no DSP lock")
 if len(sys.argv) > 1:
     from PIL import Image
     img = Image.new("RGB", (W, H))
-    img.putdata([(((v >> 10) & 31) * 255 // 31, ((v >> 5) & 31) * 255 // 31, (v & 31) * 255 // 31) for v in px])
+    img.putdata([(((v >> 10) & 31) * 255 // 31, ((v >> 5) & 31) * 255 // 31, (v & 31) * 255 // 31) for v in pxm])
     img.save(sys.argv[1])
     print("saved", sys.argv[1])
 print("ok:", len(CODE), "bytes")

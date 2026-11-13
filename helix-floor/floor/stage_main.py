@@ -341,7 +341,8 @@ def verify(e0, src_ni, new_ni, addrs, xeno_ni=None):
     if meter:
         dva, dcode, dsyms = meter
         assert im.rd(dva, len(dcode)) == dcode
-        assert im.u32(dsp_meter.PAINT_LIT) == (dva + dsyms["dm_paint"]) | 1
+        for va, want in dsp_meter.patches(dva, dsyms).items():
+            assert im.rd(va, len(want)) == want, f"DSP meter patch at {va:#x}"
     assert all(im.u32(p) == a1 for p in TAB1_BASE_PTRS)
     assert pa._decode_thumb_movw(im.rd(TAB1_CNT_INSN, 4))[1] == n_t1 and im.u32(TAB1_END_PTR) == a1 + 12 * n_t1
     assert im.u32(TAB2_BASE_PTR) == a2 and pa._decode_thumb_movw(im.rd(TAB2_CNT_INSN, 4))[1] == 824

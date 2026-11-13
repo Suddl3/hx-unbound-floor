@@ -1,8 +1,9 @@
 """DSP meter for the Helix Floor (env NAM_DSP_METER=1), ported from HXtra's dsp_meter (wisemandenny/hxtra, GPL-3.0).
 
 The home view shows each block's DSP cost (whole per cent, grey) under its icon, and each path's blocks' sum against
-what blocks may use on that path's DSP as "P1 used/75" and "P2 used/75" (white) in the title bar. The costs are the
-firmware's own declared ones (the ones it checks a preset against), not measured load.
+what blocks may use on that path's DSP as "P1 used/75" and "P2 used/75" (white) in the title bar, or as bar meters.
+Global Settings > Preferences page 2 gets "DSP Meter / Blocks" (Off/On) and "DSP Meter / Paths" (Off/Numbers/Meters).
+The costs are the firmware's own declared ones (the ones it checks a preset against), not measured load.
 
 The code goes in the local-SRAM cave (stage_main). The home view's paint function pointer, a literal the boot passes
 to the view registrar (0x28093592), is pointed at dm_paint, which wipes the labels that changed, runs the stock paint
@@ -25,6 +26,12 @@ BIN = os.path.join(HERE, "m4", "floor_dsp_meter.bin")
 SYMS = os.path.join(HERE, "m4", "floor_dsp_meter.json")
 ENABLED = os.environ.get("NAM_DSP_METER") == "1"
 PAINT_LIT, PAINT = 0x2809372c, 0x280d6be9    # the home view's paint, as the boot registers it (ldr r0 at 0x28093590)
+# Global Settings > Preferences, page 2 (Auto Impedance, Link Dual Cabs, then four empty slots): two spare main-store IDs
+# (empty labels, no stock read or write, the setter's plain path, saved with the other Global Settings) whose stock limits
+# already fit: 74 int 0..1 default 1, 122 int 0..2 default 1 (emulated from the limits function 0x2814ea2c)
+SETTINGS = ((74, b"DSP Meter\nBlocks", 0x280c3e9c), (122, b"DSP Meter\nPaths", 0x280c3e9e))
+LABELS_LONG, LABELS_SHORT, LABEL = 0x28097c58, 0x28098acc, 27     # 137 labels each (IDs 0..0x88), "Section\nName"
+TEXT_FN = 0x280941c0                         # the value-text function (id, value, out, size): trampoline to dm_text
 
 # Every firmware address floor_dsp_meter.s uses, with its stock first bytes (from HXtra's Stomp addresses by masked
 # byte matching and the call graph; see docs/FINDINGS.md "DSP meter")
@@ -38,6 +45,9 @@ STOCK = (
     (0x281404b8, "4ff0540c", "the block address map: records of 0x54 bytes (mov.w ip, #0x54)"),
     (0x2814048c, "00f5a040", "the node container at model + 0x505c (add.w r0, r0, #0x5000)"),
     (0x2811d63c, "5b6a", "the block-node lookup: [table + 0x24 + 4 handle]"),
+    (0x28150828, "b0f5bf7f", "GET_VALUE (cmp.w r0, #0x17e)"),
+    (0x280941c0, "2de9f0432ded028b", "the value-text function (push.w {r4-r9, lr}; vpush {d8})"),
+    (0x280c3e98, "7f0088007e017e017e017e01", "Preferences page 2: Auto Impedance, Link Dual Cabs, four empty slots"),
 )
 
 
@@ -79,13 +89,37 @@ def check_stock(im):
     assert im.u32(0x2813e650) == 0x284e5758, "the DSP model lock's literal is not the model pointer 0x284e5758"
 
 
+def tramp(target):
+    """ldr.w pc, [pc, #-0] ; .word target | 1"""
+    return bytes.fromhex("5ff800f0") + struct.pack("<I", target | 1)
+
+
+def patches(code_va, syms):
+    """{address: bytes} of every change outside the cave."""
+    out = {PAINT_LIT: struct.pack("<I", (code_va + syms["dm_paint"]) | 1),
+           TEXT_FN: tramp(code_va + syms["dm_text"])}
+    for sid, label, slot in SETTINGS:
+        assert len(label) < LABEL
+        for table in (LABELS_LONG, LABELS_SHORT):
+            out[table + LABEL * sid] = label.ljust(LABEL, b"\0")
+        out[slot] = struct.pack("<H", sid)
+    return out
+
+
 def apply(im, code_va, syms):
-    """Point the home view's paint at dm_paint; the code itself is already in the cave at code_va."""
+    """Point the home view's paint at dm_paint, the value text at dm_text, and put the two settings on Preferences;
+    the code itself is already in the cave at code_va."""
     check_stock(im)
-    assert code_va % 4 == 0
-    im.wr(PAINT_LIT, struct.pack("<I", (code_va + syms["dm_paint"]) | 1))
+    for sid, _, _ in SETTINGS:
+        for table in (LABELS_LONG, LABELS_SHORT):
+            assert im.rd(table + LABEL * sid, LABEL) == bytes(LABEL), f"ID {sid}'s label is not empty"
+    assert code_va % 4 == 0 and TEXT_FN % 4 == 0
+    for va, b in patches(code_va, syms).items():
+        im.wr(va, b)
     return (f"DSP meter: {len(load()[0])} B at {code_va:#x}; home view paint {PAINT_LIT:#x} -> "
-            f"{(code_va + syms['dm_paint']) | 1:#x} (then the stock {PAINT:#x})")
+            f"{(code_va + syms['dm_paint']) | 1:#x} (then the stock {PAINT:#x}); value text {TEXT_FN:#x} -> "
+            f"{(code_va + syms['dm_text']) | 1:#x}; Preferences page 2: " +
+            ", ".join(f"{sid} {label.decode()!r}" for sid, label, _ in SETTINGS))
 
 
 if __name__ == "__main__":

@@ -17,6 +17,8 @@
 .thumb
 
 .equ CMD, 0x52
+.equ CMD_INPUT, 0x51                @ remote input: a UI event packed in the request's seq (fm_input)
+.equ POST, 0x2808b669               @ (event): the UI's event post, every listener of the event's class called directly
 .equ SERVICE, 6
 .equ W, 800
 .equ H, 480
@@ -76,8 +78,97 @@ fm_register:
     add r1, sp, #4
     ldr r3, =REGISTER
     blx r3
+    adr r0, fm_input
+    orr r0, r0, #1
+    str r0, [sp, #4]
+    movs r0, #CMD_INPUT
+    add r1, sp, #4
+    ldr r3, =REGISTER
+    blx r3
     add sp, #16
     pop {r4, pc}
+
+@ fm_input: CMD_INPUT. The request's seq (u16) is the event: bit 15 set, class bits 14..12, code bits 11..6, value
+@ bits 5..0 (signed). It posts the 8-byte UI event {class, code, 0, 0, value (s32)} through POST, as the Floor's own
+@ producers do (the key function 0x2808bca0, the footswitch scan 0x2808b7e0, the pedal task), and replies 0.
+@ Class 1 is a key: value 1 press, 2 release, 3 release before a hold, 5 hold. Class 2 is a knob: code 0..6, value
+@ the turn (signed counts; 4 a step on an int setting). Other classes, and a seq without bit 15, only get the reply.
+fm_input:                           @ r0 the editor's stream, r1 the request -> r0 the stream's result
+    push {r4-r7, r10, lr}
+    sub sp, #16                     @ [sp] the result byte, [sp,#8] the event
+    mov r10, r0
+    ldrh r4, [r1, #0xc]
+    tst r4, #0x8000
+    beq fi_reply
+    ubfx r0, r4, #12, #3
+    subs r1, r0, #1
+    cmp r1, #1
+    bhi fi_reply                    @ keys and knobs only
+    strb r0, [sp, #8]
+    ubfx r0, r4, #6, #6
+    strb r0, [sp, #9]
+    movs r0, #0
+    strh r0, [sp, #10]
+    sbfx r0, r4, #0, #6
+    str r0, [sp, #12]
+    add r0, sp, #8
+    ldr r3, =POST
+    blx r3
+fi_reply:                           @ {0x66: seq, 0x67: 0, 0x68: 0}, as fm_cmd's reply but a fixint result
+    movs r0, #SERVICE
+    ldr r3, =WRITER
+    blx r3
+    mov r5, r0
+    movs r0, #SERVICE
+    ldr r3, =PREFIX_LEN
+    blx r3
+    mov r6, r0
+    movs r0, #SERVICE
+    ldr r3, =PREFIX
+    blx r3
+    mov r7, r0
+    movs r0, #SERVICE
+    ldr r3, =PREFIX_RESET
+    blx r3
+    mov r0, r5
+    mov r1, r4
+    movs r2, #0
+    ldr r3, =REPLY_HEAD
+    blx r3
+    movs r0, #0
+    strb r0, [sp]
+    ldr r0, [r5]
+    ldr r3, [r5, #4]
+    mov r1, sp
+    movs r2, #1
+    blx r3
+    sub r0, r10, #8
+    ldr r3, =LOCK
+    blx r3
+    movs r0, #0
+    strh r0, [sp, #8]
+    movs r0, #SERVICE
+    strh r0, [sp, #10]
+    ldr r0, [r6]
+    str r0, [sp, #12]
+    add r1, sp, #8
+    movs r2, #8
+    bl fm_write
+    mov r1, r7
+    ldr r2, [r6]
+    bl fm_write
+    mov r0, r10
+    movs r1, #0
+    ldr r3, [r10]
+    ldr r3, [r3, #0xc]
+    blx r3                          @ the message is complete
+    mov r4, r0
+    sub r0, r10, #8
+    ldr r3, =UNLOCK
+    blx r3
+    mov r0, r4
+    add sp, #16
+    pop {r4-r7, r10, pc}
 
 fm_cmd:                             @ r0 the editor's stream, r1 the request -> r0 the stream's result
     push {r4-r11, lr}

@@ -21,7 +21,7 @@ LCD = 0x40008000
 STUB = dict(REGISTER=0x280ee19c, NO_PARAMS=0x280f77fc, WRITER=0x280ed570, PREFIX_LEN=0x280ed594, PREFIX=0x280ed5b8,
             PREFIX_RESET=0x280ed5dc, REPLY_HEAD=0x280ed620, LOCK=0x10089148, UNLOCK=0x10089168, CLOCK=0x10009bcc,
             SLEEP=0x1008971c, REGALL_A=0x280f0528, REGALL_B=0x280f01a4, REGALL_REST=0x280ee59e,
-            S_WRITE=0x20001000, S_DONE=0x20001010, W_WRITE=0x20001020, CALLER=0x20001030)
+            S_WRITE=0x20001000, S_DONE=0x20001010, W_WRITE=0x20001020, CALLER=0x20001030, POST=0x2808b668)
 ADDR = {v: k for k, v in STUB.items()}
 
 
@@ -102,6 +102,9 @@ def hook(uc, addr, size, _):
         uc.reg_write(UC_ARM_REG_R3, r3)
         uc.reg_write(UC_ARM_REG_R0, 0)
         uc.reg_write(UC_ARM_REG_PC, pc)
+    elif name == "POST":
+        log.append(("post", bytes(uc.mem_read(a0, 8))))
+        ret(0)
     elif name == "CALLER":
         uc.emu_stop()
 
@@ -159,8 +162,10 @@ del log[:]
 assert call("fm_regall") == 0
 names = [x for x in log if isinstance(x, str)]
 assert names[:4] == ["REGALL_A", "REGALL_B", "REGALL_REST", "REGISTER"], names
-reg = [x for x in log if isinstance(x, tuple) and x[0] == "reg"][0]
-assert reg[1] == 0x52 and reg[2] == ((CAVE + sym("fm_cmd")) | 1, 0x280f77fd, 0), reg
+regs = [x for x in log if isinstance(x, tuple) and x[0] == "reg"]
+assert regs[0][1] == 0x52 and regs[0][2] == ((CAVE + sym("fm_cmd")) | 1, 0x280f77fd, 0), regs
+assert regs[1][1] == 0x51 and regs[1][2] == ((CAVE + sym("fm_input")) | 1, 0x280f77fd, 0), regs
+assert len(regs) == 2
 print("registration: OK")
 
 # 2. first request: every row, equal to the frame
@@ -191,5 +196,40 @@ assert fb == FB1 and all(got[i] == frame2[i * ROW:(i + 1) * ROW] for i in rows) 
 mu.mem_write(LCD + 0x10, struct.pack("<I", 0))
 assert request(1)[0] == FB0
 print("frame address: OK")
+
+
+def press(seq):
+    """CMD 0x51 (fm_input): -> the events it posted; its reply checked: {seq, 0, 0} as one fixint after the head."""
+    req = 0x20003000
+    mu.mem_write(req, bytes(12) + struct.pack("<H", seq))
+    out.clear()
+    del log[:]
+    res = call("fm_input", STREAM, req)
+    assert res == 0x55 and "done" in log and log.index("LOCK") < log.index("done") < log.index("UNLOCK")
+    posts = [x[1] for x in log if isinstance(x, tuple) and x[0] == "post"]
+    if posts:
+        assert log.index(("post", posts[0])) < log.index("LOCK"), "posted under the stream lock"
+    assert [x for x in log if isinstance(x, tuple) and x[0] == "head"] == [("head", WRITER_OBJ, seq, 0)]
+    assert [x[1] for x in log if isinstance(x, tuple) and x[0] == "wwrite"] == [b"\x00"]
+    m = bytes(out)
+    z, svc, total = struct.unpack_from("<HHI", m, 0)
+    assert (z, svc) == (0, 6) and total == len(pfx) and m[8:] == pfx, m
+    return posts
+
+
+def ev(cls, code, value):
+    return 0x8000 | cls << 12 | code << 6 | (value & 0x3f)
+
+
+assert press(ev(1, 0x11, 1)) == [struct.pack("<BBxxi", 1, 0x11, 1)]          # a key press
+assert press(ev(1, 0x11, 2)) == [struct.pack("<BBxxi", 1, 0x11, 2)]          # its release
+assert press(ev(1, 63, 5)) == [struct.pack("<BBxxi", 1, 63, 5)]              # a hold
+assert press(ev(2, 3, -4)) == [struct.pack("<BBxxi", 2, 3, -4)]              # knob 4 back a step
+assert press(ev(2, 0, 31)) == [struct.pack("<BBxxi", 2, 0, 31)]
+assert press(ev(0, 1, 1)) == [] and press(ev(3, 1, 1)) == [] and press(ev(6, 1, 1)) == []   # other classes: no post
+assert press(0x1234) == []                                                   # no bit 15: a reply only
+# the mirror's own seq is untouched: the next frame request (seq 2 after request(1)) still gets only changed rows
+assert request(2)[2] == []
+print("remote input: keys, knobs, other classes refused, reply, mirror seq kept: OK")
 print("sleeps per full hash pass:", log.count("SLEEP"))
 print("ALL PASS")
