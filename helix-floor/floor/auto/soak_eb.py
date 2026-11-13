@@ -5,8 +5,11 @@ Nothing is ever saved. Original header:
 
 Runs 06C (a NAM test preset) and every PERIOD s checks the Floor still obeys a preset change (probe.check).
 On a freeze: log it, power-cycle via a smart plug (plug.py, FLOOR_PLUG), wait for boot, reload 06C, carry on.
-usage: soak.py LABEL [hours=2] [period=60] [max_freezes=3]   -> log floor/auto/soak_LABEL.log"""
+With --stop-on-freeze: stop and exit nonzero after a confirmed freeze, without a power cycle.
+usage: soak_eb.py LABEL [hours=2] [period=60] [max_freezes=3] [--stop-on-freeze]   -> log floor/auto/soak_LABEL.log"""
 import os, subprocess, sys, time, datetime as dt
+STOP_ON_FREEZE = "--stop-on-freeze" in sys.argv[1:]
+args = [arg for arg in sys.argv[1:] if arg != "--stop-on-freeze"]
 import midi, probe
 HOME = int(os.environ.get("SOAK_HOME", "1"))
 AWAY = int(os.environ.get("SOAK_AWAY", "0"))
@@ -42,8 +45,8 @@ def stress(m, secs):
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 INJECT = os.environ.get("SOAK_INJECT")      # a preset blob put in HOME's edit buffer after every hop (make555.py)
-label = sys.argv[1]; hours = float(sys.argv[2]) if len(sys.argv) > 2 else 2
-period = float(sys.argv[3]) if len(sys.argv) > 3 else 60; maxf = int(sys.argv[4]) if len(sys.argv) > 4 else 3
+label = args[0]; hours = float(args[1]) if len(args) > 1 else 2
+period = float(args[2]) if len(args) > 2 else 60; maxf = int(args[3]) if len(args) > 3 else 3
 LOG = os.path.join(HERE, f"soak_{label}.log")
 
 
@@ -118,6 +121,9 @@ def main():
         if alive2:
             log(f"glitch (one failed check: {on:.1f}/{off:.1f}), alive on retry"); continue
         mins = (time.time() - up_since) / 60; freezes.append(mins)
+        if STOP_ON_FREEZE:
+            log(f"FROZEN after {mins:.1f} min up: stopping without power cycle")
+            break
         log(f"FROZEN after {mins:.1f} min up (probe {on2:.1f} / 06C {off2:.1f} dBFS) -> power cycle")
         m.close(); reboot(); m = midi.Midi(); m.pc(HOME); time.sleep(5); up_since = time.time(); inject()
         a, on, off, _ = check(m); log(f"rebooted: {'alive' if a else 'STILL NOT ANSWERING'} ({on:.1f}/{off:.1f})")
@@ -125,6 +131,8 @@ def main():
     m.close()
     log(f"end {label}: {len(freezes)} freeze(s) at {[round(x, 1) for x in freezes]} min; "
         f"last uptime {(time.time()-up_since)/60:.1f} min")
+    return 1 if STOP_ON_FREEZE and freezes else 0
 
 
-main()
+if __name__ == "__main__":
+    raise SystemExit(main())
