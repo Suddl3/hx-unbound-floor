@@ -1,0 +1,21 @@
+{
+ "fm_after": 26,
+ "fm_clear": 154,
+ "fm_cmd": 68,
+ "fm_fb0": 132,
+ "fm_fb_ok": 134,
+ "fm_hash": 756,
+ "fm_hash_words": 194,
+ "fm_hashed": 288,
+ "fm_head": 680,
+ "fm_mark": 240,
+ "fm_regall": 0,
+ "fm_register": 34,
+ "fm_row": 174,
+ "fm_row_next": 264,
+ "fm_send": 480,
+ "fm_send_next": 512,
+ "fm_seq": 664,
+ "fm_trailer": 668,
+ "fm_write": 576
+}
