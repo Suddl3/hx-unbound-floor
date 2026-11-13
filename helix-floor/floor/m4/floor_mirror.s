@@ -92,7 +92,7 @@ fm_register:
 @ bits 5..0 (signed). It posts the 8-byte UI event {class, code, 0, 0, value (s32)} through POST, as the Floor's own
 @ producers do (the key function 0x2808bca0, the footswitch scan 0x2808b7e0, the pedal task), and replies 0.
 @ Class 1 is a key: value 1 press, 2 release, 3 release before a hold, 5 hold. Class 2 is a knob: code 0..6, value
-@ the turn (signed counts; 4 a step on an int setting). Classes 0 and 3..7 are posted as they come (their codes and values are as given); a seq without bit 15 only gets the reply.
+@ the turn (signed counts; 4 a step on an int setting). Classes 0, 3 and 4 are keys with the code plus 64, 128 and 192 (the encoder and joystick presses are above 63); 5..7 and a seq without bit 15 only get the reply.
 fm_input:                           @ r0 the editor's stream, r1 the request -> r0 the stream's result
     push {r4-r7, r10, lr}
     sub sp, #16                     @ [sp] the result byte, [sp,#8] the event
@@ -100,10 +100,24 @@ fm_input:                           @ r0 the editor's stream, r1 the request -> 
     ldrh r4, [r1, #0xc]
     tst r4, #0x8000
     beq fi_reply
-    ubfx r0, r4, #12, #3            @ any class 0..7: the joystick and encoder presses are not keys or knobs
+    ubfx r0, r4, #12, #3            @ the class field
+    ubfx r1, r4, #6, #6             @ the code field
+    cmp r0, #4
+    bhi fi_reply                    @ 5..7: refused (class 7 code 0 hung the unit)
+    cmp r0, #1
+    beq fi_ok                       @ 1: a key, code 0..63
+    cmp r0, #2
+    beq fi_ok                       @ 2: a knob
+    cmp r0, #0
+    ite eq
+    moveq r2, #1
+    subne r2, r0, #1                @ 0, 3, 4 -> 1, 2, 3
+    lsls r2, r2, #6                 @ keys 64..127, 128..191, 192..255 (the key function treats code > 63 as a plain key)
+    add r1, r2
+    movs r0, #1
+fi_ok:
     strb r0, [sp, #8]
-    ubfx r0, r4, #6, #6
-    strb r0, [sp, #9]
+    strb r1, [sp, #9]
     movs r0, #0
     strh r0, [sp, #10]
     sbfx r0, r4, #0, #6

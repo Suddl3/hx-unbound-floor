@@ -226,11 +226,13 @@ assert press(ev(1, 0x11, 2)) == [struct.pack("<BBxxi", 1, 0x11, 2)]          # i
 assert press(ev(1, 63, 5)) == [struct.pack("<BBxxi", 1, 63, 5)]              # a hold
 assert press(ev(2, 3, -4)) == [struct.pack("<BBxxi", 2, 3, -4)]              # knob 4 back a step
 assert press(ev(2, 0, 31)) == [struct.pack("<BBxxi", 2, 0, 31)]
-assert press(ev(0, 1, 1)) == [struct.pack("<BBxxi", 0, 1, 1)]                # any class is posted as given
-assert press(ev(3, 5, 2)) == [struct.pack("<BBxxi", 3, 5, 2)] and press(ev(6, 1, -1)) == [struct.pack("<BBxxi", 6, 1, -1)]
+assert press(ev(0, 1, 1)) == [struct.pack("<BBxxi", 1, 65, 1)]                # class 0: key 64 + code
+assert press(ev(3, 5, 2)) == [struct.pack("<BBxxi", 1, 133, 2)]                # class 3: key 128 + code
+assert press(ev(4, 63, 1)) == [struct.pack("<BBxxi", 1, 255, 1)]               # class 4: key 192 + code
+assert press(ev(5, 1, 1)) == [] and press(ev(6, 1, -1)) == [] and press(ev(7, 0, 1)) == []   # 5..7 refused
 assert press(0x1234) == []                                                   # no bit 15: a reply only
 # the mirror's own seq is untouched: the next frame request (seq 2 after request(1)) still gets only changed rows
 assert request(2)[2] == []
-print("remote input: keys, knobs, other classes posted, reply, mirror seq kept: OK")
+print("remote input: keys 0..255, knobs, classes 5..7 refused, reply, mirror seq kept: OK")
 print("sleeps per full hash pass:", log.count("SLEEP"))
 print("ALL PASS")
