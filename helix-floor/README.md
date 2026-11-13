@@ -7,6 +7,11 @@ shared**. Overview, status and findings: the [repository README](../README.md).
 
 > **Experimental, one unit tested.** Rehearse the recovery (below) before you rely on it.
 
+For desktop editing, use the maintained [Floor editor setup and pairing guide](../EDITOR.md).
+The stock HX Edit prerequisite and the modified Floor editor are separate installations;
+installing the editor does not flash the Floor. Source integration and later offline fixes
+are recorded in [the November 12 review](../REVIEW-2026-11-12.md).
+
 ## What is different from the HX Stomp build
 
 - **Up to two NAM A2 Lite blocks per DSP** (four per preset: Path 1 runs on one DSP, Path 2 on the
@@ -69,8 +74,10 @@ Tip for testing new builds: leave the unit on a preset **without** a NAM block b
 The Floor restarts on the last preset, so if a build misbehaves with NAM running, a power cycle
 still brings it up without NAM.
 
-Known issue: **HX Edit can drop NAM blocks** when it rewrites a preset (for example when you drag
-blocks around), because it does not know the NAM model. Edit NAM presets on the unit.
+Known issue: **stock HX Edit can drop NAM blocks** when it rewrites or backs up a preset,
+because it does not know the custom model. The [Floor editor preview](../EDITOR.md) recognizes
+the normal ID 380 NAM block; this does not make stock backup/restore lossless or cover every
+experimental model layout. Keep independent NAM-preserving records and check the pairing guide.
 
 ## Layout
 

@@ -15,13 +15,15 @@ git fetch --all
 
 | Remote | Branch | Role |
 |---|---|---|
-| `origin` | `main` | This project. Always builds, always the tested line. |
+| `origin` | `main` | This project's integration line. See the recorded validation for each commit and firmware/editor pairing. |
 | `origin` | `integration/hxtra-tooling` | `main` with HXtra merged in, to read and port from. Not verified on a unit. |
 | `floor-upstream` | `helix-floor` | The Floor NAM port. Merged into `main`. |
 | `hxtra` | `main` | HXtra (HX Stomp). Source of the tooling and feature ideas. |
 | `nam-upstream` | `main` | hx-stomp-nam-lite, the foundation. |
 
 ## Branches and pull requests
+
+The maintained editor companion is [Suddl3/hx-edit-nam, floor branch](https://github.com/Suddl3/hx-edit-nam/tree/floor). Keep firmware changes here and desktop workflow changes there; use [EDITOR.md](EDITOR.md) as the pairing contract. Review upstream changes selectively, preserving attribution and offering separable fixes back. Never assume a new upstream editor feature is compatible with every Floor build.
 
 - Work on a branch, open a pull request into `main`, and let the other maintainer look at it before it is merged.
 - One feature or fix per pull request. Say what was tested and how: on a unit (which one, which build, for how long), offline (simulator, emulator, tests), or not at all.
