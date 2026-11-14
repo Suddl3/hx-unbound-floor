@@ -644,30 +644,6 @@ dm_event:
     push {r3-r7, lr}
     mov r5, r0
     ldrb r2, [r5]
-    cmp r2, #5                      @ class 5 and 6 come from the mirror only (fm_input): 12 bits of payload, code << 6 | value & 63.
-    blo de_stock                    @ 5 sets the write index into dm_imgs, 6 writes a halfword there and steps on. Not passed on.
-    cmp r2, #6
-    bhi de_stock
-    ldrb r1, [r5, #1]
-    ldrb r0, [r5, #4]
-    and r0, r0, #63
-    orr.w r0, r0, r1, lsl #6
-    adr.w r3, dm_pidx
-    cmp r2, #5
-    bne de_write
-    strh r0, [r3]
-    pop {r3-r7, pc}
-de_write:
-    ldrh r1, [r3]
-    adr.w r2, dm_imgs
-    cmp r1, #20                     @ 4 pictures of 5; the end mark stays
-    it lo
-    strhlo r0, [r2, r1, lsl #1]
-    adds r1, #1
-    strh r1, [r3]
-    pop {r3-r7, pc}
-de_stock:
-    ldrb r2, [r5]
     cmp r2, #1
     bne de_go
     ldrb r2, [r5, #1]
@@ -731,11 +707,9 @@ de_go:
 
 .ltorg
 .balign 4
-dm_imgs:                            @ Focus View's pictures: index, centre x, top y, width, height (0xffff ends); room for 4, poked live by
-    .hword SEL_PIC, 400, 174, 44, 44    @ mirror classes 5 and 6. Index SEL_PIC: the selected block's own picture
+dm_imgs:                            @ Focus View's pictures: index, centre x, top y, width, height (0xffff ends); room for 4, written
+    .hword SEL_PIC, 400, 174, 44, 44    @ live with the mirror's poke (auto/floor_art.py). Index SEL_PIC: the selected block's own picture
     .fill 16, 2, 0xffff
-dm_pidx:
-    .hword 0
 dm_seq:                             @ key, value: gear menu press and release, Home press and release
     .byte 19, 1, 19, 2, 2, 1, 2, 2
 .balign 4

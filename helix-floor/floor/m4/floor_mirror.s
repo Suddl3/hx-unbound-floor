@@ -139,10 +139,8 @@ fi_ev:
 .endif
     ubfx r0, r4, #12, #3            @ the class field
     ubfx r1, r4, #6, #6             @ the code field
-    cmp r0, #6
-    bhi fi_reply                    @ 7: refused (class 7 code 0 hung the unit)
-    cmp r0, #5
-    bhs fi_ok                       @ 5, 6: posted as they are (the DSP meter module's picture table takes them: dm_event)
+    cmp r0, #4
+    bhi fi_reply                    @ 5, 6 (pedals), 7 (class 7 code 0 hung the unit): refused
     cmp r0, #1
     beq fi_ok                       @ 1: a key, code 0..63
     cmp r0, #2
@@ -226,6 +224,10 @@ fi_reply:                           @ {0x66: seq, 0x67: 0, 0x68: 0}, as fm_cmd's
 
 @ fm_peekset: CMD_PEEK. Sets the window the frame command reads (fm_peek) and replies as fm_input does. The host asks for
 @ frames as before; each is 480 rows of 1600 bytes from that address (the first request after a change gets every row).
+@ With bit 15 set it is the live poke (RAM only, gone at the next boot; auto/floor_poke.py):
+@   bit 14 set:   pointer = pointer << 14 | bits 13..0 (three of them set a 32-bit address)
+@   bits 14, 13 clear: the byte in bits 7..0 is written at the pointer, which steps on
+@   bit 13 set:   the Thumb code at the pointer is called (r0 = bits 7..0) in the editor's task; it returns with bx lr
 fm_peekset:                         @ r0 the editor's stream, r1 the request -> r0 the stream's result
     push {r4-r7, r10, lr}
     sub sp, #16
@@ -235,10 +237,32 @@ fm_peekset:                         @ r0 the editor's stream, r1 the request -> 
     movs r0, #0
     str r0, [sp, #4]
 .endif
+    tst r4, #0x8000
+    bne fp_poke
     ubfx r0, r4, #0, #15
     lsls r0, r0, #17
     adr r3, fm_peek
     str r0, [r3]
+    b fi_reply
+fp_poke:
+    adr.w r3, fm_ptr
+    ldr r0, [r3]
+    tst r4, #0x4000
+    beq fp_byte
+    ubfx r1, r4, #0, #14
+    orr.w r0, r1, r0, lsl #14
+    str r0, [r3]
+    b fi_reply
+fp_byte:
+    tst r4, #0x2000
+    bne fp_call
+    strb r4, [r0], #1
+    str r0, [r3]
+    b fi_reply
+fp_call:
+    orr r3, r0, #1
+    uxtb r0, r4
+    blx r3
     b fi_reply
 
 fm_cmd:                             @ r0 the editor's stream, r1 the request -> r0 the stream's result
@@ -512,6 +536,8 @@ fm_ring:
 .endif
 fm_seq:
     .space 4
+fm_ptr:
+    .word 0
 fm_peek:
     .space 4
 fm_trailer:
