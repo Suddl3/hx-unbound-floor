@@ -25,6 +25,7 @@
 .equ HOME_VIEW, 0x2818c21c          @ its word 0 is 1 while the home view is the active screen
 .equ FOCUS_Y, 52                    @ Focus View blanks the paths: below the title bar ...
 .equ FOCUS_H, 288                   @ ... down to the bottom panel (y 340)
+.equ IMG_WIDGET_PAINT, 0x2808e56d  @ (frame, -, widget): the image widget's paint
 .equ IMG_LOOKUP, 0x2808af15         @ (index, &handle, &size): the image store's lookup, < 0 when missing
 .equ IMG_DRAW, 0x2808cbed           @ (frame, handle, x, y; stack w, h, flag): draws an image, as the image widget paint does
 .equ IMG_N, 358                     @ proof: the first picture of a NAM_ART_INPLACE=358 build (stage_art.py, over HelixDNA_01)
@@ -494,35 +495,40 @@ focus_fill:                         @ r4 the frame: the paths' area blanked, the
     bl focus_img
     pop {r10, pc}
 
-focus_img:                          @ r4 the frame: stock image IMG_N at (IMG_X, IMG_Y), as the image widget's paint (0x2808e56c) draws one
-    push {r5, lr}
-    sub sp, #24                     @ 0 w, 4 h, 8 flag, 16 the size's out, 20 the image's handle
-    ldr r3, =WLOCK
-    blx r3
-    movw r0, #IMG_N
-    add r1, sp, #20
-    add r2, sp, #16
-    ldr r3, =IMG_LOOKUP
-    blx r3
-    cmp r0, #0
-    blt fi_done
-    ldr r1, [sp, #20]
+focus_img:                          @ r4 the frame: every image of dm_imgs (index, x, y, w, h; 0xffff ends) through the stock image widget's paint
+    push {r5-r7, lr}                @ (0x2808e56c: it takes the widget lock itself) on a widget of ours: no parent, visible
+    adr.w r6, dm_imgs
+    adr.w r7, dm_wgt
+fi_loop:
+    ldrh r0, [r6]
+    movw r1, #0xffff
+    cmp r0, r1
+    beq fi_done
+    str r0, [r7]
+    str r0, [r7, #4]
+    mvn r1, #0
+    str r1, [r7, #8]                @ no mask colour
+    ldrh r1, [r6, #2]
+    str r1, [r7, #0xc]
+    ldrh r1, [r6, #4]
+    str r1, [r7, #0x10]
+    ldrh r1, [r6, #6]
+    str r1, [r7, #0x14]
+    ldrh r1, [r6, #8]
+    str r1, [r7, #0x18]
+    movw r1, #0x101                 @ +0x1c the anchor (1: x is the centre), +0x1d visible
+    strh r1, [r7, #0x1c]
+    movs r1, #0
+    str r1, [r7, #0x20]
+    str r1, [r7, #0x24]
     mov r0, r4
-    movw r2, #IMG_X
-    movs r3, #IMG_Y
-    movw r5, #IMG_W
-    str r5, [sp]
-    movs r5, #IMG_H
-    str r5, [sp, #4]
-    movs r5, #1
-    str r5, [sp, #8]
-    ldr r5, =IMG_DRAW
-    blx r5
-fi_done:
-    ldr r3, =WUNLOCK
+    mov r2, r7
+    ldr r3, =IMG_WIDGET_PAINT
     blx r3
-    add sp, #24
-    pop {r5, pc}
+    adds r6, #10
+    b fi_loop
+fi_done:
+    pop {r5-r7, pc}
 
 fill:                               @ r0 x, r1 y, r2 width, r3 height (on the screen), r10 the colour, r4 the frame
     push {r5, r6}
@@ -591,6 +597,28 @@ dm_event:
     push {r3-r7, lr}
     mov r5, r0
     ldrb r2, [r5]
+    cmp r2, #5                      @ class 5 and 6 come from the mirror only (fm_input): 12 bits of payload, code << 6 | value & 63.
+    blo de_stock                    @ 5 sets the write index into dm_imgs, 6 writes a halfword there and steps on. Not passed on.
+    cmp r2, #6
+    bhi de_stock
+    ldrb r1, [r5, #1]
+    ldrb r0, [r5, #4]
+    and r0, r0, #63
+    orr.w r0, r0, r1, lsl #6
+    adr.w r3, dm_pidx
+    cmp r2, #5
+    bne de_write
+    strh r0, [r3]
+    pop {r3-r7, pc}
+de_write:
+    ldrh r1, [r3]
+    adr.w r2, dm_imgs
+    strh r0, [r2, r1, lsl #1]
+    adds r1, #1
+    strh r1, [r3]
+    pop {r3-r7, pc}
+de_stock:
+    ldrb r2, [r5]
     cmp r2, #1
     bne de_go
     ldrb r2, [r5, #1]
@@ -654,6 +682,18 @@ de_go:
 
 .ltorg
 .balign 4
+dm_imgs:                            @ Focus View's pictures: index, centre x, top y, width, height (0xffff ends); room for 12, poked live by mirror classes 5 and 6
+    .hword 374, 80, 150, 30, 29
+    .hword 1093, 170, 150, 64, 64
+    .hword 1094, 300, 150, 96, 96
+    .hword 1095, 470, 150, 128, 128
+    .hword 1096, 620, 150, 32, 32
+    .fill 36, 2, 0xffff
+dm_pidx:
+    .hword 0
+.balign 4
+dm_wgt:                             @ the image widget focus_img fills
+    .space 0x28
 dm_seq:                             @ key, value: gear menu press and release, Home press and release
     .byte 19, 1, 19, 2, 2, 1, 2, 2
 .balign 4

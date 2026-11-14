@@ -35,7 +35,7 @@ class Input:
         if cls == KEY and code >= 64:               # keys 64..255 ride in classes 0, 3, 4 (fm_input adds 64, 128, 192)
             assert code < 256, code
             cls, code = {1: 0, 2: 3, 3: 4}[code // 64], code % 64
-        assert 0 <= cls < 5 and 0 <= code < 64 and -32 <= value < 32, (cls, code, value)
+        assert 0 <= cls < 7 and 0 <= code < 64 and -32 <= value < 32, (cls, code, value)
         seq = 0x8000 | cls << 12 | code << 6 | (value & 0x3F)
         ed = self.ctl.ed
         keep = ed.seq                               # the mirror's own seq sequence is left as it was

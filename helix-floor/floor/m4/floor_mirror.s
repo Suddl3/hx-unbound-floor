@@ -139,8 +139,10 @@ fi_ev:
 .endif
     ubfx r0, r4, #12, #3            @ the class field
     ubfx r1, r4, #6, #6             @ the code field
-    cmp r0, #4
-    bhi fi_reply                    @ 5..7: refused (class 7 code 0 hung the unit)
+    cmp r0, #6
+    bhi fi_reply                    @ 7: refused (class 7 code 0 hung the unit)
+    cmp r0, #5
+    bhs fi_ok                       @ 5, 6: posted as they are (the DSP meter module's picture table takes them: dm_event)
     cmp r0, #1
     beq fi_ok                       @ 1: a key, code 0..63
     cmp r0, #2

@@ -48,6 +48,7 @@ STOCK = (
     (0x2814048c, "00f5a040", "the node container at model + 0x505c (add.w r0, r0, #0x5000)"),
     (0x2811d63c, "5b6a", "the block-node lookup: [table + 0x24 + 4 handle]"),
     (0x28150828, "b0f5bf7f", "GET_VALUE (cmp.w r0, #0x17e)"),
+    (0x2808e56c, "70b51446", "the image widget's paint (push {r4, r5, r6, lr}; mov r4, r2)"),
     (0x2808af14, "00f046bb", "the image store's lookup (b.w to its body)"),
     (0x2808cbec, "2de9f04182b002ac", "the image draw (push.w {r4-r8, lr}; sub sp, #8; add r4, sp, #8)"),
     (POST, "f8b505461148124e", "the UI's event post (push {r3-r7, lr}; mov r5, r0; ldr r0, =mutex; ldr r6, =lists)"),

@@ -5,7 +5,8 @@ Entry 8 is the store's index (names, then 48-byte image records), Entry 9 its pi
 PNG of the folder becomes one 128 x 128 image: composited over black, resized, RGB555 (R << 10 | G << 5 | B), row by row from
 the top as the stock images are. Nothing already in the entries moves: the new items go after Entry 9's end with a copy of its
 item table, the new records after Entry 8's end with a copy of its record table, and the headers point at the copies.
-The new image indexes follow the stock 723; {PNG name: index} goes to <out>.art.json.
+With NAM_ART_NORECORDS=1 the index (Entry 8) is left alone and a picture's image index is its Entry 9 item index (stock has
+1093 items: the first picture is 1093). Otherwise the new image indexes follow the stock 723; {PNG name: index} goes to <out>.art.json.
 
 With NAM_ART_INPLACE=<index> no record is added: the records of the stock images from that index on (a few unused ones, as
 HelixDNA_01..12 at 358) are repointed at the new items, so Entry 8 keeps its size.
@@ -58,6 +59,35 @@ def add_items(e9, items):
     return bytes(out), first
 
 
+def place_in_splash(e9, e8, pixels):
+    """No new pixel bytes: the pictures overwrite the unused HelixLT_Splash and HelixRack_Splash images (560,000 bytes each) and
+    get new item-table entries (a copy of the table with them added) pointing inside them."""
+    magic, ver, count, table, doff, _ = struct.unpack_from("<6I", e9, 0)
+    rtable = struct.unpack_from("<I", e8, 0x14)[0]
+    out = bytearray(e9)
+    areas = []
+    for img in (370, 371):                                   # HelixLT_Splash, HelixRack_Splash
+        item = struct.unpack_from("<I", e8, rtable + RECORD * img + 8)[0]
+        ln, off = struct.unpack_from("<2I", e9, table + 8 * item)
+        areas.append([off, off + ln])
+    recs = [struct.unpack_from("<2I", e9, table + 8 * i) for i in range(count)]
+    first = len(recs)
+    for data in pixels:
+        for a in areas:
+            if a[0] + len(data) <= a[1]:
+                out[a[0]:a[0] + len(data)] = data
+                recs.append((len(data), a[0]))
+                a[0] += len(data) + (-len(data) % 4)
+                break
+        else:
+            raise SystemExit("stage_art: the splash images are full")
+    out += bytes(-len(out) % 4)
+    new_table = len(out)
+    out += b"".join(struct.pack("<2I", ln, off) for ln, off in recs)
+    struct.pack_into("<6I", out, 0, magic, ver, len(recs), new_table, doff, len(out))
+    return bytes(out), first
+
+
 def add_records(e8, records):
     assert struct.unpack_from("<I", e8, 0)[0] == E8_MAGIC, "Entry 8 is not the image index"
     table, count = struct.unpack_from("<2I", e8, 0x14)
@@ -72,24 +102,33 @@ def add_records(e8, records):
 def main():
     src, out, folder = sys.argv[1], sys.argv[2], sys.argv[3]
     size = int(sys.argv[4]) if len(sys.argv) > 4 else 128
+    sizes = [int(x) for x in os.environ["NAM_ART_SIZES"].split(",")] if os.environ.get("NAM_ART_SIZES") else [size]
     from PIL import Image
     names = sorted(f for f in os.listdir(folder) if f.lower().endswith(".png"))
     assert names, f"no PNGs in {folder}"
     data, _ = pa.load_l6ia_from_any(src)
     e8, e9 = pa.get_entry_swapped(data, 8), pa.get_entry_swapped(data, 9)
-    pixels = [rgb555(Image.open(os.path.join(folder, n)), size) for n in names]
-    new9, first_item = add_items(e9, pixels)
+    pixels = [rgb555(Image.open(os.path.join(folder, n)), sizes[i % len(sizes)]) for i, n in enumerate(names)]
+    if os.environ.get("NAM_ART_STORE") == "splash":
+        new9, first_item = place_in_splash(e9, e8, pixels)
+    else:
+        new9, first_item = add_items(e9, pixels)
     table, count = struct.unpack_from("<2I", e8, 0x14)
     like = bytearray(e8[table + RECORD * LIKE: table + RECORD * (LIKE + 1)])
     recs = []
     for i in range(len(names)):
         r = bytearray(like)
         item = first_item + i
-        for word, value in ((2, item), (3, item), (5, size), (6, size), (9, item)):
+        sz = sizes[i % len(sizes)]
+        for word, value in ((2, item), (3, item), (5, sz), (6, sz), (9, item)):
             struct.pack_into("<I", r, 4 * word, value)
         recs.append(bytes(r))
     inplace = os.environ.get("NAM_ART_INPLACE")
-    if inplace:
+    if os.environ.get("NAM_ART_NORECORDS"):
+        # the image widget's lookup uses its image index as the index into Entry 9's item table (records are not read for
+        # drawing), so a picture is drawn by its item index and Entry 8 does not change at all
+        new8, first_image = e8, first_item
+    elif inplace:
         first_image = int(inplace)
         assert first_image + len(recs) <= count, "more pictures than records to reuse"
         new8 = bytearray(e8)
