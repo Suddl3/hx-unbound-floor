@@ -26,6 +26,7 @@ SRC = os.path.join(HERE, "m4", "floor_dsp_meter.s")
 BIN = os.path.join(HERE, "m4", "floor_dsp_meter.bin")
 SYMS = os.path.join(HERE, "m4", "floor_dsp_meter.json")
 ENABLED = os.environ.get("NAM_DSP_METER") == "1"
+POST = 0x2808b668                           # the UI event post: Home flips Focus View (dm_event)
 PAINT_LIT, PAINT = 0x2809372c, 0x280d6be9    # the home view's paint, as the boot registers it (ldr r0 at 0x28093590)
 # Global Settings > Preferences, page 2 (Auto Impedance, Link Dual Cabs, then four empty slots): two spare main-store IDs
 # (empty labels, no stock read or write, the setter's plain path, saved with the other Global Settings) whose stock limits
@@ -47,6 +48,7 @@ STOCK = (
     (0x2814048c, "00f5a040", "the node container at model + 0x505c (add.w r0, r0, #0x5000)"),
     (0x2811d63c, "5b6a", "the block-node lookup: [table + 0x24 + 4 handle]"),
     (0x28150828, "b0f5bf7f", "GET_VALUE (cmp.w r0, #0x17e)"),
+    (POST, "f8b505461148124e", "the UI's event post (push {r3-r7, lr}; mov r5, r0; ldr r0, =mutex; ldr r6, =lists)"),
     (0x280941c0, "2de9f0432ded028b", "the value-text function (push.w {r4-r9, lr}; vpush {d8})"),
     (0x280c3e98, "7f0088007e017e017e017e01", "Preferences page 2: Auto Impedance, Link Dual Cabs, four empty slots"),
 )
@@ -122,7 +124,8 @@ def tramp(target):
 def patches(code_va, syms):
     """{address: bytes} of every change outside the cave."""
     out = {PAINT_LIT: struct.pack("<I", (code_va + syms["dm_paint"]) | 1),
-           TEXT_FN: tramp(code_va + syms["dm_text"])}
+           TEXT_FN: tramp(code_va + syms["dm_text"]),
+           POST: tramp(code_va + syms["dm_event"])}
     for sid, label, slot in SETTINGS:
         assert len(label) < LABEL
         for table in (LABELS_LONG, LABELS_SHORT):

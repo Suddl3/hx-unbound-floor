@@ -1,7 +1,7 @@
 @ floor_mirror.s - Helix Floor screen mirror, ported from HXtra's screen_mirror.s (wisemandenny/hxtra, GPL-3.0).
 @ HX Edit's editor service (service 6) gets one more command, CMD 0x52: it replies with the rows of the LCD's frame that
 @ changed since the last reply. The Floor's frame is 800 x 480 x 16 bit (750 KB), too big to keep a copy of, so each row
-@ keeps only a 16-bit hash (fm_hash) and a changed row is sent whole. (A change that keeps a row's hash is missed until
+@ keeps only an 8-bit hash (fm_hash) and a changed row is sent whole. (A change that keeps a row's hash is missed until
 @ the row changes again or the host skips a seq, which resends every row.)
 @
 @ Reply (the editor's own map {0x66: seq, 0x67: 0, 0x68: bin32}), the bin32 being, little-endian:
@@ -20,6 +20,8 @@
 .equ CMD_INPUT, 0x51                @ remote input: a UI event packed in the request's seq (fm_input)
 .equ CMD_PEEK, 0x50                 @ the next frames read memory, not the screen: seq (15 bits) << 17 is the address, 0 = the screen (fm_peekset)
 .equ POST, 0x2808b669               @ (event): the UI's event post, every listener of the event's class called directly
+.equ POST_A, 0x28175a08             @ POST's first two literals (live read)
+.equ POST_B, 0x281759d0
 .equ SERVICE, 6
 .equ W, 800
 .equ H, 480
@@ -106,8 +108,35 @@ fm_input:                           @ r0 the editor's stream, r1 the request -> 
     sub sp, #16                     @ [sp] the result byte, [sp,#8] the event
     mov r10, r0
     ldrh r4, [r1, #0xc]
+.ifdef SPY
+    movs r0, #0
+    str r0, [sp, #4]                @ the reply's status byte (fi_reply)
+    tst r4, #0x8000
+    bne fi_ev
+    @ a seq without bit 15 asks the event spy: bit 14 = the head counter, else bits 5..2 the ring slot and bits 1..0 the
+    @ 7-bit chunk of its event word (class << 16 | code << 8 | value & 0xff); the answer rides in the reply's status
+    adr r3, fm_ring
+    tst r4, #0x4000
+    beq fi_slot
+    adr r2, fm_idx
+    ldr r0, [r2]
+    b fi_put
+fi_slot:
+    ubfx r0, r4, #2, #4
+    ldr r0, [r3, r0, lsl #2]
+    and r1, r4, #3
+    movs r2, #7
+    muls r1, r2, r1
+    lsrs r0, r0, r1
+fi_put:
+    and r0, r0, #0x7f
+    str r0, [sp, #4]
+    b fi_reply
+fi_ev:
+.else
     tst r4, #0x8000
     beq fi_reply
+.endif
     ubfx r0, r4, #12, #3            @ the class field
     ubfx r1, r4, #6, #6             @ the code field
     cmp r0, #4
@@ -151,7 +180,11 @@ fi_reply:                           @ {0x66: seq, 0x67: 0, 0x68: 0}, as fm_cmd's
     blx r3
     mov r0, r5
     mov r1, r4
+.ifdef SPY
+    ldr r2, [sp, #4]
+.else
     movs r2, #0
+.endif
     ldr r3, =REPLY_HEAD
     blx r3
     movs r0, #0
@@ -196,6 +229,10 @@ fm_peekset:                         @ r0 the editor's stream, r1 the request -> 
     sub sp, #16
     mov r10, r0
     ldrh r4, [r1, #0xc]
+.ifdef SPY
+    movs r0, #0
+    str r0, [sp, #4]
+.endif
     ubfx r0, r4, #0, #15
     lsls r0, r0, #17
     adr r3, fm_peek
@@ -272,10 +309,11 @@ fm_hash_words:
     mul r2, r2, r12
     cmp r0, r1
     blo fm_hash_words
-    eor r2, r2, r2, lsr #16         @ folded to 16 bits: the table stays in the SRAM a build has already used
-    uxth r2, r2
-    ldrh r3, [r6, r7, lsl #1]
-    strh r2, [r6, r7, lsl #1]
+    eor r2, r2, r2, lsr #16         @ folded to 8 bits: the table stays small (the cave is nearly full with the DSP meter)
+    eor r2, r2, r2, lsr #8
+    uxtb r2, r2
+    ldrb r3, [r6, r7]
+    strb r2, [r6, r7]
     cmp r11, #0
     bne fm_mark
     cmp r2, r3
@@ -433,8 +471,43 @@ fm_write:                           @ r1 bytes, r2 how many: to the stream r10
     ldr r3, [r3, #4]
     bx r3
 
+.ifdef SPY
+@ fm_spy: the UI event post (0x2808b668) enters here through a trampoline that replaced its first 8 bytes (push {r3-r7, lr};
+@ mov r5, r0; ldr r0, =A; ldr r6, =B). It logs the event {class, code, 0, 0, value} in a 16-slot ring, replays those
+@ four and goes on at 0x2808b670.
+fm_spy:
+    push {r3-r7, lr}
+    mov r5, r0
+    ldrb r2, [r5]
+    ldrb r3, [r5, #1]
+    ldrb r1, [r5, #4]
+    lsls r2, r2, #16
+    orr.w r2, r2, r3, lsl #8
+    orrs r2, r1
+    cmp.w r2, #0x30000              @ class 3 code 0 value 0 arrives ~70 times a second: not logged
+    beq fs_go
+    adr r3, fm_ring
+    adr r1, fm_idx
+    ldr r7, [r1]
+    and r12, r7, #15
+    str.w r2, [r3, r12, lsl #2]
+    adds r7, #1
+    str r7, [r1]
+fs_go:
+    ldr r0, =POST_A
+    ldr r6, =POST_B
+    ldr r12, =POST + 8              @ 0x2808b670 | 1
+    bx r12
+.endif
+
 .ltorg
 .align 2
+.ifdef SPY
+fm_idx:
+    .space 4
+fm_ring:
+    .space 64
+.endif
 fm_seq:
     .space 4
 fm_peek:
@@ -443,5 +516,5 @@ fm_trailer:
     .space TRAILER
 fm_head:                            @ the result's fixed part: 16 bytes, then the 60-byte bitmap
     .space HDR
-fm_hash:                            @ a 16-bit hash a row
-    .space H * 2
+fm_hash:                            @ an 8-bit hash a row
+    .space H

@@ -18,6 +18,13 @@
 .thumb
 .fpu fpv4-sp-d16
 
+.equ POST_A, 0x28175a08             @ the UI event post's (0x2808b668) first two literals
+.equ POST_B, 0x281759d0
+.equ POST_ENTRY, 0x2808b669         @ the UI event post, as called (through the trampoline, so dm_event again)
+.equ POST_BODY, 0x2808b671          @ it goes on here (its first 8 bytes are replayed by dm_event)
+.equ HOME_VIEW, 0x2818c21c          @ its word 0 is 1 while the home view is the active screen
+.equ FOCUS_Y, 52                    @ Focus View blanks the paths: below the title bar ...
+.equ FOCUS_H, 288                   @ ... down to the bottom panel (y 340)
 .equ STOCK_PAINT, 0x280d6be9        @ the home view's paint (fb, view)
 .equ GET_VALUE, 0x28150829          @ (id, out): a Global Setting, value at out + 4
 .equ ID_BLOCKS, 74                  @ Preferences "DSP Meter / Blocks": a spare main-store ID, stock limits int 0..1, default 1
@@ -269,6 +276,11 @@ dm_drawn:
     adds r6, #1
     cmp r6, #NTRACK
     bne dm_draw
+    adr.w r3, dm_cfg                @ Focus View (dm_cfg + 2): the paths' area blanked, a placeholder block in it
+    ldrb r3, [r3, #2]
+    cbz r3, dm_unfocused
+    bl focus_fill
+dm_unfocused:
     ldr r0, [sp, #128]
     add sp, #140
     pop {r4-r11, pc}
@@ -464,6 +476,22 @@ lb_out:
     add sp, #16
     pop {r5-r11, pc}
 
+focus_fill:                         @ r4 the frame: the paths' area blanked, the placeholder block in it
+    push {r10, lr}
+    movs r10, #0
+    movs r0, #0
+    movs r1, #FOCUS_Y
+    movw r2, #W
+    movw r3, #FOCUS_H
+    bl fill
+    movw r10, #EDGE
+    movs r0, #250
+    movs r1, #100
+    movw r2, #300
+    movs r3, #180
+    bl fill
+    pop {r10, pc}
+
 fill:                               @ r0 x, r1 y, r2 width, r3 height (on the screen), r10 the colour, r4 the frame
     push {r5, r6}
     mov.w r12, #W
@@ -523,7 +551,79 @@ dt_done:
     movs r0, #0
     bx lr
 
+@ dm_event: the UI event post (0x2808b668) enters here through a trampoline over its first 8 bytes (push {r3-r7, lr};
+@ mov r5, r0; ldr r0, =A; ldr r6, =B), which are replayed. Home (key 2, value 0 on the panel, 1 from the mirror's input)
+@ pressed while the home view is the active screen flips Focus View (dm_cfg + 2); the event goes on to the stock post.
+.thumb_func
+dm_event:
+    push {r3-r7, lr}
+    mov r5, r0
+    ldrb r2, [r5]
+    cmp r2, #1
+    bne de_go
+    ldrb r2, [r5, #1]
+    cmp r2, #2
+    bne de_go
+    adr.w r3, dm_cfg
+    ldrb r1, [r3, #3]               @ bit 0 a repaint is due, bit 1 our own Home is being posted
+    tst r1, #2
+    bne de_go
+    ldrb r2, [r5, #4]
+    cmp r2, #1
+    bhi de_rel
+    ldr r2, =HOME_VIEW              @ the press: flip Focus View when the home view is the active screen
+    ldr r2, [r2]
+    cmp r2, #1
+    bne de_go
+    ldrb r2, [r3, #2]
+    eor r2, r2, #1
+    strb r2, [r3, #2]
+    orr r1, r1, #1
+    strb r1, [r3, #3]
+    cbz r2, de_go
+    ldr r4, =FB0                    @ on: blank both framebuffers now (the screen shows one, the next paint the other)
+    bl focus_fill
+    ldr r4, =FB0 + 0xbb800
+    bl focus_fill
+    b de_go
+de_rel:
+    cmp r2, #2                      @ the release: the stock only repaints what changed, so a gear menu round trip
+    bne de_go                       @ (key 19, then Home) repaints the whole home screen. Done here, not in the press,
+    tst r1, #1                      @ where the button task is still busy with the press
+    beq de_go
+    movs r1, #2
+    strb r1, [r3, #3]
+    sub sp, #8
+    adr.w r6, dm_seq
+    movs r4, #4
+de_next:
+    movs r0, #1
+    strb r0, [sp]
+    ldrb r0, [r6], #1
+    strb r0, [sp, #1]
+    movs r0, #0
+    strh r0, [sp, #2]
+    ldrb r0, [r6], #1
+    str r0, [sp, #4]
+    mov r0, sp
+    ldr r3, =POST_ENTRY
+    blx r3
+    subs r4, #1
+    bne de_next
+    add sp, #8
+    adr.w r3, dm_cfg
+    movs r2, #0
+    strb r2, [r3, #3]
+de_go:
+    ldr r0, =POST_A
+    ldr r6, =POST_B
+    ldr r12, =POST_BODY
+    bx r12
+
 .ltorg
+.balign 4
+dm_seq:                             @ key, value: gear menu press and release, Home press and release
+    .byte 19, 1, 19, 2, 2, 1, 2, 2
 .balign 4
 dt_onoff:
     .ascii "Off\0\0\0\0\0On\0\0\0\0\0\0"
