@@ -69,6 +69,11 @@ def main():
     bf.slots(s4)
     bf.run(os.path.join(HERE, "test_arm_guards.py"))          # (the 13-cap rule set; 16 differs by the constant)
     bf.run(os.path.join(HERE, "test_ir_title.py"))
+    art = os.environ.get("NAM_ART")          # a folder of PNGs: personal pictures added to the image store (stage_art.py)
+    if art:
+        bf.run(os.path.join(HERE, "stage_art.py"), s4, s4 + ".art", art, os.environ.get("NAM_ART_SIZE", "128"))
+        os.replace(s4 + ".art", s4)
+        os.replace(s4 + ".art.art.json", out + ".art.json")
     rep = bf.report(s0, s4)
     print(rep)
     open(os.path.join(b, "CHANGES_NAM2.txt" if os.environ.get("NAM_555_VARIANT", "hybrid") == "hybrid" else

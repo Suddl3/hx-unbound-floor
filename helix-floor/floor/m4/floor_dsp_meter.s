@@ -25,6 +25,13 @@
 .equ HOME_VIEW, 0x2818c21c          @ its word 0 is 1 while the home view is the active screen
 .equ FOCUS_Y, 52                    @ Focus View blanks the paths: below the title bar ...
 .equ FOCUS_H, 288                   @ ... down to the bottom panel (y 340)
+.equ IMG_LOOKUP, 0x2808af15         @ (index, &handle, &size): the image store's lookup, < 0 when missing
+.equ IMG_DRAW, 0x2808cbed           @ (frame, handle, x, y; stack w, h, flag): draws an image, as the image widget paint does
+.equ IMG_N, 358                     @ proof: the first picture of a NAM_ART_INPLACE=358 build (stage_art.py, over HelixDNA_01)
+.equ IMG_X, 400                     @ the image's centre (anchor 1)
+.equ IMG_Y, 150
+.equ IMG_W, 128
+.equ IMG_H, 128
 .equ STOCK_PAINT, 0x280d6be9        @ the home view's paint (fb, view)
 .equ GET_VALUE, 0x28150829          @ (id, out): a Global Setting, value at out + 4
 .equ ID_BLOCKS, 74                  @ Preferences "DSP Meter / Blocks": a spare main-store ID, stock limits int 0..1, default 1
@@ -484,13 +491,38 @@ focus_fill:                         @ r4 the frame: the paths' area blanked, the
     movw r2, #W
     movw r3, #FOCUS_H
     bl fill
-    movw r10, #EDGE
-    movs r0, #250
-    movs r1, #100
-    movw r2, #300
-    movs r3, #180
-    bl fill
+    bl focus_img
     pop {r10, pc}
+
+focus_img:                          @ r4 the frame: stock image IMG_N at (IMG_X, IMG_Y), as the image widget's paint (0x2808e56c) draws one
+    push {r5, lr}
+    sub sp, #24                     @ 0 w, 4 h, 8 flag, 16 the size's out, 20 the image's handle
+    ldr r3, =WLOCK
+    blx r3
+    movw r0, #IMG_N
+    add r1, sp, #20
+    add r2, sp, #16
+    ldr r3, =IMG_LOOKUP
+    blx r3
+    cmp r0, #0
+    blt fi_done
+    ldr r1, [sp, #20]
+    mov r0, r4
+    movw r2, #IMG_X
+    movs r3, #IMG_Y
+    movw r5, #IMG_W
+    str r5, [sp]
+    movs r5, #IMG_H
+    str r5, [sp, #4]
+    movs r5, #1
+    str r5, [sp, #8]
+    ldr r5, =IMG_DRAW
+    blx r5
+fi_done:
+    ldr r3, =WUNLOCK
+    blx r3
+    add sp, #24
+    pop {r5, pc}
 
 fill:                               @ r0 x, r1 y, r2 width, r3 height (on the screen), r10 the colour, r4 the frame
     push {r5, r6}
