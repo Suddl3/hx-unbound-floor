@@ -732,7 +732,7 @@ de_go:
 .ltorg
 .balign 4
 dm_imgs:                            @ Focus View's pictures: index, centre x, top y, width, height (0xffff ends); room for 4, poked live by
-    .hword SEL_PIC, 400, 110, 128, 128  @ mirror classes 5 and 6. Index SEL_PIC: the selected block's own picture
+    .hword SEL_PIC, 400, 174, 44, 44    @ mirror classes 5 and 6. Index SEL_PIC: the selected block's own picture
     .fill 16, 2, 0xffff
 dm_pidx:
     .hword 0

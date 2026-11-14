@@ -71,20 +71,26 @@ def add_by_preset_id(e9, size):
     recs = [struct.unpack_from("<2I", e9, table + 8 * i) for i in range(count)]
     out = bytearray(e9)
     at = []
-    if os.environ.get("NAM_ART_STORE") == "splash":           # no growth: into the unused LT / Rack splash images
+    if os.environ.get("NAM_ART_STORE") == "splash":
+        # first into the stock images the Floor never shows (the LT / Rack splashes, 1.12 MB, and HelixDNA_01..12, 0.17 MB),
+        # the rest appended (growth: +0.4 MB booted, +3.4 MB left the unit deaf on USB)
         e8 = pa.get_entry_swapped(_DATA, 8)
         rtable = struct.unpack_from("<I", e8, 0x14)[0]
         areas = []
-        for img in (370, 371):                                 # HelixLT_Splash, HelixRack_Splash
+        for img in (370, 371, *range(358, 370)):              # HelixLT_Splash, HelixRack_Splash, HelixDNA_01..12
             item = struct.unpack_from("<I", e8, rtable + RECORD * img + 8)[0]
             ln, off = struct.unpack_from("<2I", e9, table + 8 * item)
             areas.append([off, off + ln])
         for data in pix:
             a = next((a for a in areas if a[0] + len(data) <= a[1]), None)
-            assert a, "stage_art: the splash images are full (a smaller NAM_ART_SIZE)"
-            out[a[0]:a[0] + len(data)] = data
-            at.append((len(data), a[0]))
-            a[0] += len(data) + (-len(data) % 4)
+            if a:
+                out[a[0]:a[0] + len(data)] = data
+                at.append((len(data), a[0]))
+                a[0] += len(data) + (-len(data) % 4)
+            else:
+                out += bytes(-len(out) % 4)
+                at.append((len(data), len(out)))
+                out += data
     else:
         for data in pix:
             out += bytes(-len(out) % 4)

@@ -3,7 +3,7 @@
   floor_art.py PIC,X,Y,W,H [PIC,X,Y,W,H ...]  replace the table (up to 4 pictures), then repaint (a joystick nudge right
                                               then left redraws the home view)
   PIC is an image index, or "sel": the selected block's own picture (a NAM_ART=map build: item 1093 + its preset id)
-  floor_art.py                                back to the default: sel,400,110,128,128
+  floor_art.py                                back to the default: sel,400,174,44,44
 
 Class 5 sets the write index, class 6 writes a 12-bit halfword and steps on (fm_input posts them, dm_event takes them).
 The payload rides in the event's code (high 6 bits) and value (low 6 bits, sent as a signed 6-bit number).
@@ -31,7 +31,7 @@ def poke(inp, words):
 
 
 def main():
-    args = sys.argv[1:] or ["sel,400,110,128,128"]
+    args = sys.argv[1:] or ["sel,400,174,44,44"]
     pics = [tuple(SEL if i == 0 and x == "sel" else int(x) for i, x in enumerate(a.split(","))) for a in args]
     assert pics and all(len(p) == 5 for p in pics) and len(pics) <= SLOTS
     pics += [(4095, 0, 0, 0, 0)] * (SLOTS - len(pics))     # unused slots: an index past the item table, which the lookup skips
