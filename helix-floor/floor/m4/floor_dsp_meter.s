@@ -28,11 +28,13 @@
 .equ IMG_WIDGET_PAINT, 0x2808e56d  @ (frame, -, widget): the image widget's paint
 .equ IMG_LOOKUP, 0x2808af15         @ (index, &handle, &size): the image store's lookup, < 0 when missing
 .equ IMG_DRAW, 0x2808cbed           @ (frame, handle, x, y; stack w, h, flag): draws an image, as the image widget paint does
-.equ IMG_N, 358                     @ proof: the first picture of a NAM_ART_INPLACE=358 build (stage_art.py, over HelixDNA_01)
-.equ IMG_X, 400                     @ the image's centre (anchor 1)
-.equ IMG_Y, 150
-.equ IMG_W, 128
-.equ IMG_H, 128
+.equ SEL_PIC, 4094                  @ dm_imgs index meaning the selected block's picture (floor_art.py sends 4094 for "sel")
+.equ ART_BASE, 1093                 @ NAM_ART=map: Entry 9 item ART_BASE + preset id is that model's picture (stage_art.py)
+.equ N_PIDS, 833                    @ preset ids 0..832
+.equ SEL_BLOCK, 0x281043e9          @ (out byte) -> the selected block's id
+.equ MEMSET, 0x28155f35             @ (dst, byte, n)
+.equ PRESET_OBJ, 0x28114a1d         @ () -> the current preset
+.equ BLOCK_DESC, 0x28148ccd         @ (preset, block id, desc 0x34 B) -> < 0 when none
 .equ STOCK_PAINT, 0x280d6be9        @ the home view's paint (fb, view)
 .equ GET_VALUE, 0x28150829          @ (id, out): a Global Setting, value at out + 4
 .equ ID_BLOCKS, 74                  @ Preferences "DSP Meter / Blocks": a spare main-store ID, stock limits int 0..1, default 1
@@ -496,14 +498,22 @@ focus_fill:                         @ r4 the frame: the paths' area blanked, the
     pop {r10, pc}
 
 focus_img:                          @ r4 the frame: every image of dm_imgs (index, x, y, w, h; 0xffff ends) through the stock image widget's paint
-    push {r5-r7, lr}                @ (0x2808e56c: it takes the widget lock itself) on a widget of ours: no parent, visible
+    push {r5-r7, lr}                @ (0x2808e56c: it takes the widget lock itself) on a widget of ours (on the stack): no parent,
+    sub sp, #0x28                   @ visible
     adr.w r6, dm_imgs
-    adr.w r7, dm_wgt
+    mov r7, sp
 fi_loop:
     ldrh r0, [r6]
     movw r1, #0xffff
     cmp r0, r1
     beq fi_done
+    movw r1, #SEL_PIC
+    cmp r0, r1
+    bne fi_have
+    bl focus_pid
+    cmp r0, #0
+    blt fi_next
+fi_have:
     str r0, [r7]
     str r0, [r7, #4]
     mvn r1, #0
@@ -525,10 +535,47 @@ fi_loop:
     mov r2, r7
     ldr r3, =IMG_WIDGET_PAINT
     blx r3
+fi_next:
     adds r6, #10
     b fi_loop
 fi_done:
+    add sp, #0x28
     pop {r5-r7, pc}
+
+focus_pid:                          @ -> r0 the selected block's picture (ART_BASE + its preset id), or < 0 (empty, none). As the
+    push {r4, lr}                   @ block title's callers (0x280a5f20): selected block, its descriptor; preset id = word at +1
+    sub sp, #0x40
+    add r0, sp, #0x38
+    ldr r3, =SEL_BLOCK
+    blx r3
+    mov r4, r0
+    mov r0, sp
+    movs r1, #0
+    movs r2, #0x34
+    ldr r3, =MEMSET
+    blx r3
+    ldr r3, =PRESET_OBJ
+    blx r3
+    mov r1, r4
+    mov r2, sp
+    ldr r3, =BLOCK_DESC
+    blx r3
+    cmp r0, #0
+    blt fp_none
+    ldr r0, [sp]
+    lsrs r0, r0, #8
+    ldrb r1, [sp, #4]
+    orr r0, r0, r1, lsl #24
+    movw r1, #N_PIDS
+    cmp r0, r1
+    bhs fp_none                     @ (also -1, an empty block)
+    addw r0, r0, #ART_BASE
+    b fp_out
+fp_none:
+    mvn r0, #0
+fp_out:
+    add sp, #0x40
+    pop {r4, pc}
 
 fill:                               @ r0 x, r1 y, r2 width, r3 height (on the screen), r10 the colour, r4 the frame
     push {r5, r6}
@@ -613,7 +660,9 @@ dm_event:
 de_write:
     ldrh r1, [r3]
     adr.w r2, dm_imgs
-    strh r0, [r2, r1, lsl #1]
+    cmp r1, #20                     @ 4 pictures of 5; the end mark stays
+    it lo
+    strhlo r0, [r2, r1, lsl #1]
     adds r1, #1
     strh r1, [r3]
     pop {r3-r7, pc}
@@ -682,18 +731,11 @@ de_go:
 
 .ltorg
 .balign 4
-dm_imgs:                            @ Focus View's pictures: index, centre x, top y, width, height (0xffff ends); room for 12, poked live by mirror classes 5 and 6
-    .hword 374, 80, 150, 30, 29
-    .hword 1093, 170, 150, 64, 64
-    .hword 1094, 300, 150, 96, 96
-    .hword 1095, 470, 150, 128, 128
-    .hword 1096, 620, 150, 32, 32
-    .fill 36, 2, 0xffff
+dm_imgs:                            @ Focus View's pictures: index, centre x, top y, width, height (0xffff ends); room for 4, poked live by
+    .hword SEL_PIC, 400, 110, 128, 128  @ mirror classes 5 and 6. Index SEL_PIC: the selected block's own picture
+    .fill 16, 2, 0xffff
 dm_pidx:
     .hword 0
-.balign 4
-dm_wgt:                             @ the image widget focus_img fills
-    .space 0x28
 dm_seq:                             @ key, value: gear menu press and release, Home press and release
     .byte 19, 1, 19, 2, 2, 1, 2, 2
 .balign 4
