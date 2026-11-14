@@ -9,6 +9,7 @@ m4/floor_mirror.s fm_input). Pairs with floor_mirror.py: press, then look. HX Ed
   floor_input.py do STEPS... --shot out.png     a sequence: tap:C, hold:C, turn:K:N, wait:S; then a screenshot
 
 The event travels in the request's seq: bit 15 set, class bits 14..12, code bits 11..6, value bits 5..0 (signed).
+Key codes 64..255 (the encoder and joystick presses) go as class 0, 3 or 4 (fm_input adds 64, 128 or 192); tap/hold take them as plain numbers.
 The firmware posts {class, code, 0, 0, value} to the UI as its own producers do and replies 0. Key values: 1 press,
 2 release, 3 release before a hold, 5 hold. Knob values: the turn, -32..31 counts an event (longer turns are split).
 """
@@ -31,7 +32,10 @@ class Input:
         self.ctl = ctl or hx_ctl.HxCtl(pid=0x4248, timeout=10.0)
 
     def event(self, cls, code, value):
-        assert 0 <= cls < 8 and 0 <= code < 64 and -32 <= value < 32, (cls, code, value)
+        if cls == KEY and code >= 64:               # keys 64..255 ride in classes 0, 3, 4 (fm_input adds 64, 128, 192)
+            assert code < 256, code
+            cls, code = {1: 0, 2: 3, 3: 4}[code // 64], code % 64
+        assert 0 <= cls < 7 and 0 <= code < 64 and -32 <= value < 32, (cls, code, value)
         seq = 0x8000 | cls << 12 | code << 6 | (value & 0x3F)
         ed = self.ctl.ed
         keep = ed.seq                               # the mirror's own seq sequence is left as it was
