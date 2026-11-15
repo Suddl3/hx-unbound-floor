@@ -1,0 +1,11 @@
+{
+ "scenes": ["neon_rain"],
+ "default": "neon_rain",
+ "category": {
+  "input": null,
+  "output": null,
+  "sendreturn": null,
+  "split": null,
+  "merge": null
+ }
+}

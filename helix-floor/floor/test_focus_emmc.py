@@ -11,20 +11,20 @@ BASE, FB, STORE = 0x1008ba38, 0x285a3f50, 0x400000
 STUBS = {0x281043e8: "sel", 0x28155f34: "memset", 0x28114a1c: "obj", 0x28148ccc: "desc", 0x1000504c: "read"}
 S, N = 20, 10
 SPP = (S * S * 2 + 511) // 512
-FIRST = STORE + 8
+FIRST = STORE + 12
 
 
 BGFIRST, Y0, ROWS, BGN = 0x460000, 52, 8, 2          # backgrounds: 2 of 8 rows of 800 pixels, from row 52
 BGSPB = (ROWS * 1600 + 511) // 512
 
 
-def bg_section(count=BGN, spb=BGSPB, y0=Y0, rows=ROWS, magic=b"HXBG", slots=None):
+def bg_section(count=BGN, spb=BGSPB, y0=Y0, rows=ROWS, magic=b"HXBG", slots=None, mode=0):
     slots = slots if slots is not None else {5: 1, 9: 0, 7: 0xFF}
-    sec = magic + struct.pack("<HHIHH", count, spb, BGFIRST, y0, rows)
+    sec = magic + struct.pack("<HHIHHHH", count, spb, BGFIRST, y0, rows, mode, 0) + bytes(4)
     return sec + bytes(slots.get(i, 0xFF) for i in range(N))
 
 
-def machine(with_store=True, bg=None):
+def machine(with_store=True, bg=None, setb=False):
     mu = Uc(UC_ARCH_ARM, UC_MODE_THUMB | UC_MODE_MCLASS)
     for b, s in ((0x10000000, 0x100000), (0x28000000, 0x2000000), (0x20000000, 0x10000)):
         mu.mem_map(b, s)
@@ -37,15 +37,22 @@ def machine(with_store=True, bg=None):
         mp = [0xffff] * N
         mp[5], mp[9], mp[7] = 2, 0, 1
         hdr = b"HXPC" + bytes(12) + struct.pack("<HHI", S, N, FIRST) + struct.pack(f"<{N}H", *mp)
-        hdr += bytes(8 * 512 - len(hdr))
+        hdr += bytes(12 * 512 - len(hdr))
         if bg is not None:
             hdr = hdr[:2048] + bg + hdr[2048 + len(bg):]
+            if setb:                                      # set B: pid 5 -> picture 0 on slot 0 (set A: picture 2, slot 1)
+                mb = [0xFFFF] * N
+                mb[5] = 0
+                hdr = hdr[:3072] + struct.pack(f"<{N}H", *mb) + hdr[3072 + 2 * N:]
+                sb = bytes([0xFF] * N)
+                sb = sb[:5] + bytes([0]) + sb[6:]
+                hdr = hdr[:5072] + sb + hdr[5072 + N:]
             for k in range(BGN):                          # background k: row r is bytes [0xA0 + k, r] x 800
                 data = b"".join(bytes([0xA0 + k, r]) * 800 for r in range(ROWS)) 
                 data += bytes(BGSPB * 512 - len(data))
                 for j in range(BGSPB):
                     emmc[BGFIRST + k * BGSPB + j] = data[512 * j:512 * (j + 1)]
-        for j in range(8):
+        for j in range(12):
             emmc[STORE + j] = hdr[512 * j:512 * (j + 1)]
         for k in range(3):
             pic = b"".join(bytes([k + 1, 0x40 + r]) * S for r in range(S))
@@ -99,14 +106,14 @@ def drawn(fb, k):
 
 run, st = machine()
 fb = run(5)
-assert st["reads"] == [(STORE, 8), (FIRST + 2 * SPP, SPP)] and drawn(fb, 2)     # header on the first call, then the picture
+assert st["reads"] == [(STORE, 12), (FIRST + 2 * SPP, SPP)] and drawn(fb, 2)     # header on the first call, then the picture
 assert sum(fb) == sum(sum(bytes([3, 0x40 + r]) * S) for r in range(S))
 assert drawn(run(5), 2) and st["reads"] == []                                  # header kept, picture cached
 assert drawn(run(9), 0) and st["reads"] == [(FIRST, SPP)]
 assert not any(run(3)) and not any(run(10)) and not any(run(-1)) and not any(run(5, ok=-1))
 assert not any(run(5, fail=True)) and drawn(run(5), 2)                         # a failed read is retried
 run, st = machine(with_store=False)
-assert not any(run(5)) and st["reads"] == [(STORE, 8)]                         # no store: the header read once...
+assert not any(run(5)) and st["reads"] == [(STORE, 12)]                         # no store: the header read once...
 assert not any(run(5)) and st["reads"] == []                                   # ...and never again
 
 def bgdrawn(fb, k):
@@ -120,7 +127,7 @@ def bgnone(fb):
 # backgrounds: the model's slot is read once (cached), copied into rows y0.., the picture goes over it
 run, st = machine(bg=bg_section())
 fb = run(5)
-assert st["reads"] == [(STORE, 8), (BGFIRST + BGSPB, BGSPB), (FIRST + 2 * SPP, SPP)], st["reads"]
+assert st["reads"] == [(STORE, 12), (BGFIRST + BGSPB, BGSPB), (FIRST + 2 * SPP, SPP)], st["reads"]
 assert bgdrawn(fb, 1) and drawn(fb, 2)
 fb = run(5)
 assert st["reads"] == [] and bgdrawn(fb, 1) and drawn(fb, 2)                   # background and picture cached
@@ -145,6 +152,16 @@ for bad in (dict(magic=b"HXBX"), dict(count=251), dict(rows=0), dict(rows=ROWS, 
 # an old store (no background section): exactly as before
 run, st = machine(bg=None)
 fb = run(5)
-assert bgnone(fb) and drawn(fb, 2) and st["reads"] == [(STORE, 8), (FIRST + 2 * SPP, SPP)]
-print("focus_emmc: backgrounds by slot, cached, bounds: OK")
+assert bgnone(fb) and drawn(fb, 2) and st["reads"] == [(STORE, 12), (FIRST + 2 * SPP, SPP)]
+# set B (the theme pack): the mode word picks its map and slots; set A is untouched in the same header
+run, st = machine(bg=bg_section(mode=1), setb=True)
+fb = run(5)
+assert bgdrawn(fb, 0) and drawn(fb, 0), "set B"
+assert st["reads"] == [(STORE, 12), (BGFIRST, BGSPB), (FIRST, SPP)], st["reads"]
+assert bgnone(run(9)) and not any(run(3))                                       # set B has no entry for pid 9: nothing drawn
+run, st = machine(bg=bg_section(mode=0), setb=True)
+assert bgdrawn(run(5), 1) and drawn(run(5), 2)                                 # mode 0: set A as before
+run, st = machine(bg=bg_section(mode=7), setb=True)
+assert bgdrawn(run(5), 1) and drawn(run(5), 2)                                 # anything but 1: set A
+print("focus_emmc: backgrounds by slot, cached, bounds, two sets: OK")
 print("focus_emmc: header read once, picture by preset id, cache, retry, none / empty / no block, no store: OK")

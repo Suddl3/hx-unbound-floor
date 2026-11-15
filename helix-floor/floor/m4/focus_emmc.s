@@ -25,6 +25,9 @@
 .equ CENTRE_Y, 196
 .equ BGCACHE, 0x29940000            @ one background, up to 0xc0000 B (to the icon store's RAM at TBL)
 .equ BGMAX, 0xc0000
+.equ HDR_SECS, 12                   @ header sectors read on the first call (4096 B held set A only)
+.equ SETB_MAP, 3072                 @ set B (theme pack): u16 map[preset id] here, u8 slot[preset id] at SETB_SLOT (ids <= 1000)
+.equ SETB_SLOT, 5072
 .equ BG_HDR, 2048                   @ in the header read at HDR: "HXBG", u16 count, u16 sectors a background, u32 first sector,
 .equ MAGICBG, 0x47425848            @ u16 y0, u16 rows, then u8 slot[preset id] (0xff none); the PC side is bg_store.py
 .global fe_img, fe_hook
@@ -550,7 +553,7 @@ fe_img:                             @ r4 the frame
     bhi fe_out                      @ 2: no store
     ldr r0, =HDR                    @ 0: the first call reads the store's header
     ldr r1, =STORE
-    movs r2, #8
+    movs r2, #HDR_SECS
     ldr r3, =READ
     blx r3
     ldr r1, =HDR
@@ -595,7 +598,13 @@ fe_ready:
     mov r8, r0
     bl fe_bg                        @ the model's background first (r0 its preset id, r4 the frame); the picture goes over it
     mov r0, r8
-    add r2, r5, #8
+    add r2, r5, #8                  @ the picture map of set A (the header's own)
+    ldr r3, =HDR + BG_HDR + 16
+    ldrh r3, [r3]                   @ the mode: 1 = set B (its own map at SETB_MAP), anything else (an old store: 0) = set A
+    cmp r3, #1
+    bne fe_seta
+    ldr r2, =HDR + SETB_MAP
+fe_seta:
     ldrh r9, [r2, r0, lsl #1]       @ r9 its picture
     movw r1, #0xffff
     cmp r9, r1
@@ -661,11 +670,16 @@ fe_bg:
     bne fb_out
     ldr r1, =HDR + 18               @ the header's preset id count
     ldrh r1, [r1]
-    cmp r1, #2000                   @ the slot bytes must stay inside the 8 header sectors
+    cmp r1, #1000                   @ the slot bytes must stay inside the header sectors
     bhi fb_out
     cmp r0, r1
     bhs fb_out
-    add r1, r5, #16
+    add r1, r5, #24                 @ set A's slots (the section's own: after magic .. rows, mode, spare)
+    ldrh r2, [r5, #16]              @ the mode
+    cmp r2, #1
+    bne fb_seta
+    ldr r1, =HDR + SETB_SLOT
+fb_seta:
     ldrb r6, [r1, r0]               @ r6 the slot
     ldrh r1, [r5, #4]               @ the count
     cmp r1, #250

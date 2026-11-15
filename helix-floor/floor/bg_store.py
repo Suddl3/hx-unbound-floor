@@ -8,7 +8,11 @@ background section at byte BG_HDR = 2048:
     +6  u16 sectors a background takes (>= ROWS * 1600 / 512, <= 1024)
     +8  u32 sector of background 0
     +12 u16 y0 (the first frame row drawn), +14 u16 rows
-    +16 u8 slot[preset id]: the background of that model's Focus View (0xff: none, plain black as before)
+    +16 u16 mode: 0 = set A (the header's own picture map + the slots below), 1 = set B (a theme pack)
+    +24 u8 slot[preset id] of set A: the background of that model's Focus View (0xff: none, plain black as before)
+  and, for set B, absolute header offsets SETB_MAP: u16 picture map[preset id], SETB_SLOT: u8 slot[preset id]. The header is
+  HDR_SECTORS (12) sectors, up to MAX_IDS (1000) preset ids. Switching sets = rewriting the mode word (floor_emmc_art.py
+  bg-mode); the store holds the pictures of both sets, each composited on its own backgrounds.
 
 A background is ROWS rows of 800 RGB555 pixels (little-endian, from the top; the rows from y0 of the 800 x 480 frame) on
 whole sectors, from BG_STORE up (its own eMMC area, past the picture store at 0x400000 and the icon store at 0x440000).
@@ -34,6 +38,10 @@ W, H = 800, 480
 Y0, ROWS = 52, 288                  # Focus View's area: m4/floor_dsp_meter.s FOCUS_Y / FOCUS_H
 CENTRE_X, CENTRE_Y = 400, 196       # where fe_img puts a picture's centre (m4/focus_emmc.s)
 BG_HDR = 2048
+SETB_MAP, SETB_SLOT = 3072, 5072        # set B's picture map (u16 per preset id) and slots (u8), absolute header offsets
+MAX_IDS = 1000
+HDR_SECTORS = 12                        # header sectors the firmware reads (m4/focus_emmc.s HDR_SECS)
+HDR_BYTES = HDR_SECTORS * 512
 BG_STORE = 0x460000
 MAGIC = b"HXBG"
 MAX_COUNT = 250
@@ -123,10 +131,17 @@ def resolve(assign, n, cats, syms):
     return scenes, slots
 
 
-def section(slots, count, first_sector):
-    """The header's background section (bytes BG_HDR..)."""
-    out = MAGIC + struct.pack("<HHIHH", count, sectors_per_bg(), first_sector, Y0, ROWS)
+def section(slots, count, first_sector, mode=0, map_b=None, slots_b=None):
+    """The header's background bytes from BG_HDR on (to at most HDR_BYTES): the section for set A (SPC: scene per category),
+    its mode word, and set B (a theme pack) at SETB_MAP / SETB_SLOT when given. mode 0 = set A, 1 = set B."""
+    assert len(slots) <= MAX_IDS
+    out = MAGIC + struct.pack("<HHIHHHH", count, sectors_per_bg(), first_sector, Y0, ROWS, mode, 0) + bytes(4)
     out += bytes(0xFF if s is None else s for s in slots)
+    if map_b is not None:
+        assert len(map_b) == len(slots_b) == len(slots)
+        out += bytes(SETB_MAP - BG_HDR - len(out)) + struct.pack(f"<{len(map_b)}H", *map_b)
+        out += bytes(SETB_SLOT - BG_HDR - len(out)) + bytes(0xFF if s is None else s for s in slots_b)
+    assert BG_HDR + len(out) <= HDR_BYTES
     return out
 
 

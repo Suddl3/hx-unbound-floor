@@ -40,11 +40,15 @@ try:
 except SystemExit:
     pass
 
-# 3. the header section
+# 3. the header section: set A at +24, mode at +16, set B's map and slots at their absolute offsets
 slots = [None, 0, 1, 1]
 sec = bs.section(slots, 2, bs.BG_STORE)
-assert sec[:4] == b"HXBG" and struct.unpack_from("<HHIHH", sec, 4) == (2, bs.sectors_per_bg(), bs.BG_STORE, bs.Y0, bs.ROWS)
-assert sec[16:] == bytes([0xFF, 0, 1, 1]) and bs.sectors_per_bg() == 900
+assert sec[:4] == b"HXBG" and struct.unpack_from("<HHIHHH", sec, 4) == (2, bs.sectors_per_bg(), bs.BG_STORE, bs.Y0, bs.ROWS, 0)
+assert sec[24:] == bytes([0xFF, 0, 1, 1]) and bs.sectors_per_bg() == 900
+sec = bs.section(slots, 2, bs.BG_STORE, mode=1, map_b=[7, 8, 9, 0xFFFF], slots_b=[0, 0, None, 1])
+assert struct.unpack_from("<H", sec, 16)[0] == 1
+assert sec[bs.SETB_MAP - bs.BG_HDR:][:8] == struct.pack("<4H", 7, 8, 9, 0xFFFF)
+assert sec[bs.SETB_SLOT - bs.BG_HDR:][:4] == bytes([0, 0, 0xFF, 1]) and len(sec) <= bs.HDR_BYTES - bs.BG_HDR
 assert len(bs.background_bytes(scene)) == 900 * 512
 
 # 4. the assignment: a model's symbol wins over its category, the category over the default; unknown scenes are refused

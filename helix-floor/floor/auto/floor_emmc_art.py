@@ -1,12 +1,13 @@
 """Focus View's pictures stored in the eMMC (past every partition), drawn by the reader built into the firmware (NAM_EMMC_ART=1, m4/focus_emmc.s).
 
-  floor_emmc_art.py write [SIZE] [--scenes DIR --assign FILE]
+  floor_emmc_art.py write [SIZE] [--scenes DIR --assign FILE [--theme FILE]]
                                    once: HX Edit's model pictures (art_map.py, the user's own install) at SIZE x SIZE
                                    (default 128) written to the eMMC from sector 0x400000, then read back to check. With
                                    --scenes (a folder of <name>.png, 800 x 480) and --assign (bg_store.py's JSON) every
                                    picture is stored on the background of its model, and the backgrounds go to sector
                                    0x460000 (bg_store.py: the layout)
   floor_emmc_art.py bg-live        dev mode (RAM only): run the module with backgrounds from free SDRAM (a restart undoes it)
+  floor_emmc_art.py bg-mode 0|1 [installed]   switch the store between scene per category (0) and the theme pack (1)
   floor_emmc_art.py bg-test SCENES ASSIGN   dev mode: add the background section to the EXISTING store header, backgrounds
                                    to 0x460000 (eMMC past the partitions); bg-off removes the section
   floor_emmc_art.py erase          zeroes the store's header sectors (the pictures stay but are never read)
@@ -30,52 +31,61 @@ import floor_peek  # noqa: E402
 import floor_poke  # noqa: E402
 
 STORE = 0x400000
-HDR_SECTORS = 8
+HDR_SECTORS = 12                # header sectors (m4/focus_emmc.s HDR_SECS, bg_store.HDR_SECTORS): pictures start after them
 MAGIC = b"HXPC"
 
 
-def build(size, scenes=None, assign=None):
+def build(size, scenes=None, assign=None, theme=None):
+    """(header, pictures, sectors a picture, backgrounds). assign = set A (scene per category, the default); theme = an optional
+    set B (a theme pack) in the same assignment format: its own composited pictures, map and slots; the header's mode word
+    (0 = A) picks the set (bg-mode switches it without rewriting anything else)."""
     import art_map
-    from PIL import Image
     from stage_art import rgb555
     m = art_map.build()
     n = len(m["symbols"])
-    mp = [m["ids"].get(pid, 0xFFFF) for pid in range(n)]
-    slots, bgs = [None] * n, []
-    pics = []
+    base = [m["ids"].get(pid, 0xFFFF) for pid in range(n)]
+    pics, bgs, slots_a, map_b, slots_b = [], [], [None] * n, None, None
     if scenes:
         import bg_store
-        assert 2064 + n <= 4096, "the header's background section would not fit its 8 sectors"
+        assert n <= bg_store.MAX_IDS, f"{n} preset ids: the header holds {bg_store.MAX_IDS}"
         cats, syms = bg_store.categories()
-        names, slots = bg_store.resolve(assign, n, cats, syms)
+        names = list(assign["scenes"]) + [x for x in (theme or {}).get("scenes", []) if x not in assign["scenes"]]
         scn = [bg_store.scene_rgb(os.path.join(scenes, nm + ".png")) for nm in names]
         bgs = [bg_store.background_bytes(sc) for sc in scn]
-        done = {}
-        for pid in range(n):                              # one stored picture per (picture, background)
-            if mp[pid] == 0xFFFF:
-                continue
-            key = (mp[pid], slots[pid])
-            if key not in done:
-                img = art_map.open_picture(m["pictures"][mp[pid]])
-                done[key] = len(pics)
-                pics.append(rgb555(img, size) if slots[pid] is None else bg_store.composite(scn[slots[pid]], img, size))
-            mp[pid] = done[key]
+
+        def compose(asg):
+            _, slots = bg_store.resolve(dict(asg, scenes=names), n, cats, syms)
+            mp, done = [0xFFFF] * n, {}
+            for pid in range(n):                          # one stored picture per (picture, background)
+                if base[pid] == 0xFFFF:
+                    continue
+                key = (base[pid], slots[pid])
+                if key not in done:
+                    img = art_map.open_picture(m["pictures"][base[pid]])
+                    done[key] = len(pics)
+                    pics.append(rgb555(img, size) if slots[pid] is None else bg_store.composite(scn[slots[pid]], img, size))
+                mp[pid] = done[key]
+            return mp, slots
+        mp, slots_a = compose(assign)
+        if theme:
+            map_b, slots_b = compose(theme)
     else:
+        mp = base
         pics = [rgb555(art_map.open_picture(p), size) for p in m["pictures"]]
     spp = (size * size * 2 + 511) // 512
     hdr = MAGIC + struct.pack("<HH", 1, len(pics)) + bytes(8)
     hdr += struct.pack("<HHI", size, n, STORE + HDR_SECTORS) + struct.pack(f"<{n}H", *mp)
     assert len(hdr) <= (bg_store.BG_HDR if bgs else HDR_SECTORS * 512)
     if bgs:
-        hdr += bytes(bg_store.BG_HDR - len(hdr)) + bg_store.section(slots, len(bgs), bg_store.BG_STORE)
+        hdr += bytes(bg_store.BG_HDR - len(hdr)) + bg_store.section(slots_a, len(bgs), bg_store.BG_STORE, 0, map_b, slots_b)
     assert len(hdr) <= HDR_SECTORS * 512
     hdr += bytes(HDR_SECTORS * 512 - len(hdr))
     pics = [px + bytes(spp * 512 - len(px)) for px in pics]
     return hdr, pics, spp, bgs
 
 
-def write(size, scenes=None, assign=None):
-    hdr, pics, spp, bgs = build(size, scenes, assign)
+def write(size, scenes=None, assign=None, theme=None):
+    hdr, pics, spp, bgs = build(size, scenes, assign, theme)
     data = b"".join(pics)
     total = len(data) // 512
     print(f"{len(pics)} pictures {size}x{size}: {total} sectors ({len(data) / 1e6:.1f} MB) from {STORE + HDR_SECTORS:#x}"
@@ -297,6 +307,8 @@ def bg_test(scenes, assign):
             raise SystemExit("no picture store on the eMMC (floor_emmc_art.py write first)")
         n = struct.unpack_from("<H", hdr, 18)[0]
         size = struct.unpack_from("<H", hdr, 16)[0]
+        if struct.unpack_from("<I", hdr, 20)[0] < STORE + HDR_SECTORS:
+            raise SystemExit("this store's pictures start inside the 12 header sectors: rewrite it first (write)")
         print(f"existing store: {size} x {size} pictures, {n} preset ids")
         cats, syms = bg_store.categories()
         names, slots = bg_store.resolve(assign, n, cats, syms)
@@ -320,12 +332,39 @@ def bg_test(scenes, assign):
     print(f"{len(bgs)} backgrounds written, header section added: {dict((nm, slots.count(i)) for i, nm in enumerate(names))}")
 
 
+def bg_mode(mode, installed=False):
+    """Switch the picture store between set A (0: scene per category) and set B (1: the theme pack): the mode word in the
+    eMMC header (one sector write; survives restarts) and, when the focus module is running, its RAM copy of the header and
+    caches, so the screen follows at the next paint. Which module's caches: the dev-mode copy at LIVE_VA (bg-live, the default)
+    or, with installed=True, the one built in after segment 1 (only for a build made from this source: the state words sit at
+    its end, and an older build's module is shorter)."""
+    import bg_store
+    import focus_emmc
+    with floor_poke.Poke() as p:
+        p.enable_bulk()
+        hdr = bytearray(floor_emmc.read(p, STORE, HDR_SECTORS))
+        if hdr[bg_store.BG_HDR:bg_store.BG_HDR + 4] != bg_store.MAGIC:
+            raise SystemExit("this store has no background section")
+        if struct.unpack_from("<I", hdr, 20)[0] < STORE + HDR_SECTORS:
+            raise SystemExit("this store's pictures start inside the 12 header sectors: rewrite it first (write)")
+        struct.pack_into("<H", hdr, bg_store.BG_HDR + 16, mode)
+        floor_emmc.write(p, STORE, bytes(hdr))
+        assert floor_emmc.read(p, STORE, HDR_SECTORS) == bytes(hdr)
+        p.write(0x29900000 + bg_store.BG_HDR + 16, struct.pack("<H", mode))     # the RAM copy (HDR in m4/focus_emmc.s)
+        n = len(focus_emmc.load())
+        base = focus_emmc.VA if installed else LIVE_VA         # fe_cached, fe_bgcached: the caches hold set-specific picture ids
+        p.write(base + n - 8, struct.pack("<2I", 0xFFFFFFFF, 0xFFFFFFFF))
+    print(f"store mode {mode} ({'theme pack' if mode else 'scene per category'})")
+
+
 def bg_off():
     """Dev mode: remove the background section from the header (the backgrounds stay, never read)."""
     import bg_store
     with floor_poke.Poke() as p:
         p.enable_bulk()
         hdr = floor_emmc.read(p, STORE, HDR_SECTORS)
+        if struct.unpack_from("<I", hdr, 20)[0] < STORE + HDR_SECTORS:
+            raise SystemExit("this store's pictures start inside the 12 header sectors: refusing to rewrite them")
         new = hdr[:bg_store.BG_HDR] + bytes(HDR_SECTORS * 512 - bg_store.BG_HDR)
         floor_emmc.write(p, STORE, new)
         assert floor_emmc.read(p, STORE, HDR_SECTORS) == new
@@ -349,16 +388,20 @@ def main():
     if a and a[0] == "write":
         flag = lambda f: a[a.index(f) + 1] if f in a else None
         rest = [x for x in a[1:] if x not in ("--scenes", "--assign", flag("--scenes"), flag("--assign"))]
-        scenes, assign = flag("--scenes"), flag("--assign")
-        if bool(scenes) != bool(assign):
-            sys.exit("--scenes and --assign go together")
-        write(int(rest[0]) if rest else 128, scenes, json.load(open(assign)) if assign else None)
+        scenes, assign, theme = flag("--scenes"), flag("--assign"), flag("--theme")
+        if bool(scenes) != bool(assign) or (theme and not scenes):
+            sys.exit("--scenes and --assign go together; --theme (a second assignment, the theme pack) needs both")
+        rest = [x for x in rest if x != "--theme" and x != theme]
+        write(int(rest[0]) if rest else 128, scenes, json.load(open(assign)) if assign else None,
+              json.load(open(theme)) if theme else None)
     elif a and a[0] == "icons":
         icons_write(int(a[1]) if len(a) > 1 else ICON_SIZE)
     elif a and a[0] == "bg-live":
         bg_live()
     elif a and a[0] == "bg-test" and len(a) == 3:
         bg_test(a[1], json.load(open(a[2])))
+    elif a and a[0] == "bg-mode" and len(a) in (2, 3) and a[1] in ("0", "1"):
+        bg_mode(int(a[1]), installed=a[2:] == ["installed"])
     elif a and a[0] == "bg-off":
         bg_off()
     elif a and a[0] == "icons-live":
