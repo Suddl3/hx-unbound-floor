@@ -1,0 +1,12 @@
+{
+ "scenes": ["synthwave", "neon_rain"],
+ "default": "synthwave",
+ "category": {
+  "amp": "neon_rain",
+  "cab": "neon_rain",
+  "preamp": "neon_rain",
+  "input": null,
+  "output": null,
+  "sendreturn": null
+ }
+}
