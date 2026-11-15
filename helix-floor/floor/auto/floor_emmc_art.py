@@ -109,7 +109,7 @@ def stock_blocks():
     e8, e9 = pa.get_entry_swapped(data, 8), pa.get_entry_swapped(data, 9)
     rtable, count = struct.unpack_from("<2I", e8, 0x14)
     itable = struct.unpack_from("<I", e9, 12)[0]
-    bm, cols = bytearray(128), [0] * 1024
+    bm, cols, index = bytearray(128), [0] * 1024, {}
     for i in range(min(count, 1024)):
         off, ln = struct.unpack_from("<2I", e8, 0x24 + 8 * i)
         name = e8[off:off + ln].split(b"\0")[0].decode("latin1")
@@ -127,6 +127,10 @@ def stock_blocks():
             if (sat, max(r, g, b)) > best[:2]:
                 best = (sat, max(r, g, b), v)
         cols[i] = best[2] if best[0] >= 3 else 0
+        index[name] = i
+    for name, i in index.items():                    # a bypassed frame has its category's colour (its own icon is washed out)
+        if name.endswith("Off") and index.get(name[:-3]) is not None and cols[index[name[:-3]]]:
+            cols[i] = cols[index[name[:-3]]]
     return bytes(bm), cols
 
 

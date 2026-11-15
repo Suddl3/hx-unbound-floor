@@ -300,8 +300,8 @@ fh_out:
 
 @ fh_ring: the outline of a 48 x 48 block frame (r0 its first pixel, r1 the category colour spread as above): the 4 pixel band
 @ round the edge, where every grey pixel (the stock outline: a grey of 16 in 5 bits on a plain frame, 31 = white on the selected
-@ one, dimmer on the bypassed frames, in between at the edges) becomes the category colour times grey / 32: half the colour on
-@ the frames that are not selected, the whole colour on the selected one (a category without a colour, 0, is left white).
+@ one, dimmer on the bypassed frames, in between at the edges) becomes the category colour times (grey squared / 32) / 32: a quarter of the colour on
+@ the frames that are not selected, nearly all of it on the selected one (a category without a colour, 0, is left white).
 fh_ring:
     push {r4-r9, lr}
     movw r4, #0x7c1f
@@ -341,6 +341,11 @@ fr_run:                             @ r7 pixel, r8 count
     bne fr_skip
     cmp r3, #0
     beq fr_skip
+    cmp r11, #0
+    bne fr_lin                      @ a bypassed frame (its outline is a grey of 6, the colour its category's): grey / 32 as it is
+    mul r3, r3, r3
+    lsrs r3, r3, #5                 @ grey squared / 32: a plain frame (16) 8, the selected (31) 30, so 25% against 94% of the colour
+fr_lin:
     mul r2, r1, r3
     add r2, r5
     lsrs r2, r2, #5

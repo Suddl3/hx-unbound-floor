@@ -178,12 +178,13 @@ def px(fb, x, y):
 
 st["frames"] = [(103, 126, 16), (188, 126, 16), (103, 270, 8), (700, 400, 31)]
 fb = run()
-assert px(fb, 103 - 24, 126) == (14, 2, 1) and px(fb, 103, 126 - 24) == (14, 2, 1)      # a plain outline (grey 16): half the category colour
-assert px(fb, 103 + 23, 126 + 23) == (14, 2, 1) and px(fb, 103 - 22, 126 + 22) == (14, 2, 1)
-assert px(fb, 103 - 24, 270) == (7, 1, 1)                                               # grey 8 (a dimmer frame): a quarter
-assert px(fb, 700 - 24, 400) == (27, 4, 2)                                              # white (selected): the whole colour, not white
+assert px(fb, 103 - 24, 126) == (7, 1, 1) and px(fb, 103, 126 - 24) == (7, 1, 1)         # a plain outline (grey 16): a quarter of the category colour
+assert px(fb, 103 + 23, 126 + 23) == (7, 1, 1) and px(fb, 103 - 22, 126 + 22) == (7, 1, 1)
+assert px(fb, 188 - 24, 126) == (7, 1, 1)                                               # a bypassed frame (image 40) at grey 16: grey / 32, no squaring
+assert px(fb, 103 - 24, 270) == (2, 0, 0)                                               # grey 8 (a dimmer frame): almost nothing
+assert px(fb, 700 - 24, 400) == (26, 4, 2)                                              # white (selected): 94% of the colour, not white
 assert px(fb, 103 - 20, 126) == (0, 0, 0)                                               # outside the outline band: nothing
-assert px(fb, 103 - 3, 126 - 3) != (14, 2, 1)                                           # the blanked square / picture inside
+assert px(fb, 103 - 3, 126 - 3) != (7, 1, 1)                                           # the blanked square / picture inside
 fb2 = run()
 assert fb2 == fb and st["reads"] == []
 # the tuning words: a selected (white) frame goes toward the category colour with sel_mix, the dimming follows dim_shift / dim_mask
