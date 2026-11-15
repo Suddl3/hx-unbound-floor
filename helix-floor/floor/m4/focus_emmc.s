@@ -230,10 +230,14 @@ fh_pic:
     movhs r1, #1
     movlo r1, #0
     str r1, [sp, #0x40]             @ 1: the selected block
+    str r0, [sp, #0x60]
     ldr r1, [sp, #0x3c]
     cbz r1, fh_noring               @ no category colour: the frame stays as it is
     bl fh_ring                      @ the frame's outline in the category colour
 fh_noring:
+    ldr r0, [sp, #0x60]
+    ldr r1, [sp, #0x40]
+    bl fh_outer                     @ the selected frame's second border, white, outside the first (black again when not selected)
     ldr r0, [sp, #0x38]
     adds r2, r9, #2
     movs r1, #0
@@ -308,8 +312,8 @@ fh_out:
 
 @ fh_ring: the outline of a 48 x 48 block frame (r0 its first pixel, r1 the category colour spread as above): the 4 pixel band
 @ round the edge, where every grey pixel (the stock outline: a grey of 16 in 5 bits on a plain frame, 31 = white on the selected
-@ one, dimmer on the bypassed frames, in between at the edges) becomes the category colour times (grey squared / 32) / 32: a quarter of the colour on
-@ the frames that are not selected, nearly all of it on the selected one (a category without a colour, 0, is left white).
+@ one, 6 on the bypassed ones, in between at the edges) becomes the category colour: all of it on an enabled frame (selected or
+@ not), 6/32 of it on a bypassed one (a category without a colour, 0, is left as it is).
 fh_ring:
     push {r4-r9, lr}
     movw r4, #0x7c1f
@@ -350,9 +354,16 @@ fr_run:                             @ r7 pixel, r8 count
     cmp r3, #0
     beq fr_skip
     cmp r11, #0
-    bne fr_lin                      @ a bypassed frame (its outline is a grey of 6, the colour its category's): grey / 32 as it is
-    mul r3, r3, r3
-    lsrs r3, r3, #5                 @ grey squared / 32: a plain frame (16) 8, the selected (31) 30, so 25% against 94% of the colour
+    bne fr_byp
+    cmp r3, #16                     @ an enabled frame: the whole colour (the stock outline is a grey of 16, white 31 when selected)
+    it hi
+    movhi r3, #16
+    lsls r3, r3, #1
+    b fr_lin
+fr_byp:
+    cmp r3, #6                      @ a bypassed frame: 6/32 of the colour, selected or not
+    it hi
+    movhi r3, #6
 fr_lin:
     mul r2, r1, r3
     add r2, r5
@@ -372,6 +383,55 @@ fr_skip:
     bne fr_run
     bx lr
 
+@ fh_outer: a 2 pixel border round the 48 x 48 frame (r0 its first pixel): white when r1 = 1, else wiped (the stock paint does not clean
+@ outside a block's own image). The path line enters the frame at its middle rows (22..25): there a wipe puts back the line's
+@ own pixel (the one just outside the border) instead of black.
+fh_outer:
+    push {r4-r7, lr}
+    mov r3, r1
+    cmp r3, #0
+    ite ne
+    movwne r4, #0x7fff
+    moveq r4, #0
+    subw r5, r0, #3204             @ row -2, column -2
+    movs r6, #0
+fo_row:
+    cmp r6, #2
+    blo fo_full
+    cmp r6, #50
+    bhs fo_full
+    subs r7, r6, #24                @ frame row 22 is row index 24
+    cmp r7, #4
+    bhs fo_side
+    cmp r3, #0
+    bne fo_side                     @ selected: white all the way
+    ldrh r2, [r5, #-2]
+    strh r2, [r5]
+    strh r2, [r5, #2]
+    ldrh r2, [r5, #104]
+    strh r2, [r5, #100]
+    strh r2, [r5, #102]
+    b fo_next
+fo_side:
+    strh r4, [r5]
+    strh r4, [r5, #2]
+    strh r4, [r5, #100]
+    strh r4, [r5, #102]
+    b fo_next
+fo_full:
+    mov r7, r5
+    movs r2, #52
+fo_px:
+    strh r4, [r7], #2
+    subs r2, #1
+    bne fo_px
+fo_next:
+    add.w r5, r5, #1600
+    adds r6, #1
+    cmp r6, #52
+    bne fo_row
+    pop {r4-r7, pc}
+
 .equ MEMSET_, 0
 .ltorg
 .org 0x400
@@ -379,7 +439,7 @@ dm_cfg_p:
     .word 0                         @ the meter's dm_cfg (the build / the host fills it)
     .word 0                         @ the meter's focus_fill, Thumb bit set
     .word 0                         @ fi_state
-    .word 0, 0                      @ dim (shift, mask) of the art, by state (poked live to tune): on, not selected: full
+    .word 0, 0                      @ dim (shift, mask) of the art, by state (poked live to tune): enabled: full
     .word 1, 0x3def                 @ bypassed, not selected: half
     .word 0, 0                      @ on, selected: full
     .word 1, 0x3def                 @ bypassed, selected: half

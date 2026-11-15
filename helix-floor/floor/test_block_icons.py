@@ -108,6 +108,9 @@ def machine(store=True):
                 for x in range(48):
                     if x < 2 or x >= 46 or y < 2 or y >= 46:
                         mu.mem_write(FB + ((cy - 24 + y) * 800 + cx - 24 + x) * 2, struct.pack("<H", grey << 10 | grey << 5 | grey))
+            for y in range(22, 26):                       # the path line's stubs just outside the frame (columns -3 and 50)
+                for x in (-3, 50):
+                    mu.mem_write(FB + ((cy - 24 + y) * 800 + cx - 24 + x) * 2, struct.pack("<H", 0x4210))
         mu.reg_write(UC_ARM_REG_R0, VIEW)
         mu.reg_write(UC_ARM_REG_R1, FB)
         mu.reg_write(UC_ARM_REG_R4, 0x1234)
@@ -180,13 +183,18 @@ def px(fb, x, y):
 
 st["frames"] = [(103, 126, 16), (188, 126, 16), (103, 270, 8), (700, 400, 31)]
 fb = run()
-assert px(fb, 103 - 24, 126) == (7, 1, 1) and px(fb, 103, 126 - 24) == (7, 1, 1)         # a plain outline (grey 16): a quarter of the category colour
-assert px(fb, 103 + 23, 126 + 23) == (7, 1, 1) and px(fb, 103 - 22, 126 + 22) == (7, 1, 1)
-assert px(fb, 188 - 24, 126) == (7, 1, 1)                                               # a bypassed frame (image 40) at grey 16: grey / 32, no squaring
-assert px(fb, 103 - 24, 270) == (2, 0, 0)                                               # grey 8 (a dimmer frame): almost nothing
-assert px(fb, 700 - 24, 400) == (26, 4, 2)                                              # white (selected): 94% of the colour, not white
+assert px(fb, 103 - 24, 126) == (28, 4, 2) and px(fb, 103, 126 - 24) == (28, 4, 2)       # an enabled frame (grey 16): the whole category colour
+assert px(fb, 103 + 23, 126 + 23) == (28, 4, 2) and px(fb, 103 - 22, 126 + 22) == (28, 4, 2)
+assert px(fb, 188 - 24, 126) == (3, 0, 0)                                               # a bypassed frame (image 40): 6/32 of its colour
+assert px(fb, 103 - 24, 270) == (14, 2, 1)                                              # grey 8 (a dimmer outline): half
+assert px(fb, 700 - 24, 400) == (28, 4, 2)                                              # selected (white): the same colour as any enabled frame
+# the second border: white outside the selected frame only, the others wiped, the line's stubs kept
+assert all(px(fb, 700 - 26 + k, 400 - 26) == (31, 31, 31) for k in range(52))            # its top row (row -2)
+assert all(px(fb, 700 - 26, 400 - 26 + k) == (31, 31, 31) for k in range(52)) and px(fb, 700 + 25, 400) == (31, 31, 31)
+assert px(fb, 103 - 26, 126 - 26) == (0, 0, 0) and px(fb, 103 + 25, 126 + 25) == (0, 0, 0)
+assert px(fb, 103 - 26, 126) == (16, 16, 16) and px(fb, 103 - 25, 126) == (16, 16, 16) and px(fb, 103 + 24 + 1, 126) == (16, 16, 16)   # wiped, the stub's grey (0x4210) back
 assert px(fb, 103 - 20, 126) == (0, 0, 0)                                               # outside the outline band: nothing
-assert px(fb, 103 - 3, 126 - 3) != (7, 1, 1)                                           # the blanked square / picture inside
+assert px(fb, 103 - 3, 126 - 3) != (28, 4, 2)                                           # the blanked square / picture inside
 # enabled blocks' pictures are at full brightness (selected or not), bypassed ones at half
 drawn(fb, 700, 400, 0x10)
 drawn(fb, 103, 126, 0x30)
