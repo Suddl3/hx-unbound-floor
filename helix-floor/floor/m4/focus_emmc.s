@@ -242,18 +242,21 @@ fh_er_px:
     bne fh_er_row
     ldr r0, [sp, #0x38]
     addw r0, r0, #1602             @ one row and one pixel in: the picture's first pixel
-    movw lr, #0x7fff
+    adr.w r8, dm_cfg_p
+    ldr lr, [r8, #0x10]             @ dim_mask
+    ldr r8, [r8, #0xc]              @ dim_shift
     cmp r11, #0
-    it ne
-    movwne lr, #0x3def              @ a bypassed frame: half the brightness
+    it eq
+    moveq lr, #0                    @ not a bypassed frame: nothing taken off
     mov r2, r9
 fh_ar_row:
     mov r12, r0
     mov r3, r9
 fh_ar_px:
     ldrh r1, [r10], #2
-    lsrs r1, r1, r11
-    ands r1, r1, lr
+    lsrs r11, r1, r8
+    ands r11, r11, lr
+    subs r1, r1, r11                @ bypassed: v - ((v >> dim_shift) & dim_mask) (shift 1, mask 0x3def: half)
     strh r1, [r12], #2
     subs r3, #1
     bne fh_ar_px
@@ -296,14 +299,15 @@ fh_out:
     pop {r4-r11, pc}
 
 @ fh_ring: the outline of a 48 x 48 block frame (r0 its first pixel, r1 the category colour spread as above): the 4 pixel band
-@ round the edge, where a pixel that is a grey of 1..16 (the stock outline 16, its edge pixels and the bypassed frames' dimmer
-@ greys) becomes the category colour times grey / 16. Brighter greys (the selected frame's white) and everything else stay.
+@ round the edge, where every grey pixel (the stock outline: a grey of 16 in 5 bits on a plain frame, 31 = white on the selected
+@ one, dimmer on the bypassed frames, in between at the edges) becomes the category colour times grey / 32: half the colour on
+@ the frames that are not selected, the whole colour on the selected one (a category without a colour, 0, is left white).
 fh_ring:
     push {r4-r9, lr}
-    movw r4, #0xfc3f
-    movt r4, #0x03f0                @ the fields' mask after the shift
-    movw r5, #0x2008
-    movt r5, #0x0080                @ 8 in each field: rounding
+    movw r4, #0x7c1f
+    movt r4, #0x01f0                @ the fields' mask after the shift by 5
+    movw r5, #0x4010
+    movt r5, #0x0100                @ 16 in each field: rounding
     movs r6, #0
 fr_row:
     mov r7, r0
@@ -335,12 +339,11 @@ fr_run:                             @ r7 pixel, r8 count
     ubfx r9, r2, #10, #5
     cmp r3, r9
     bne fr_skip
-    subs r9, r3, #1
-    cmp r9, #15
-    bhi fr_skip
+    cmp r3, #0
+    beq fr_skip
     mul r2, r1, r3
     add r2, r5
-    lsrs r2, r2, #4
+    lsrs r2, r2, #5
     and r2, r2, r4
     lsrs r3, r2, #10
     and r3, r3, #0x7c00
@@ -358,12 +361,14 @@ fr_skip:
 
 .equ MEMSET_, 0
 .ltorg
-.org 0x3c0
+.org 0x400
 dm_cfg_p:
     .word 0                         @ the meter's dm_cfg (the build / the host fills it)
     .word 0                         @ the meter's focus_fill, Thumb bit set
     .word 0                         @ fi_state
-.org 0x400
+    .word 1                         @ dim_shift  (bypassed art: v - ((v >> dim_shift) & dim_mask); poked live to tune)
+    .word 0x3def                    @ dim_mask
+.org 0x440
 .thumb_func
 fe_img:                             @ r4 the frame
     push {r4-r10, lr}

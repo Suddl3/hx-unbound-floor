@@ -142,7 +142,7 @@ def drawn(fb, cx, cy, tag, dim=False):
         row = fb[((cy - S // 2 + r) * 800 + cx - S // 2) * 2:][:2 * S]
         want = bytes([tag, 0x40 + r]) * S
         if dim:
-            want = b"".join(struct.pack("<H", (struct.unpack("<H", want[i:i + 2])[0] >> 1) & 0x3DEF) for i in range(0, len(want), 2))
+            want = b"".join(struct.pack("<H", struct.unpack("<H", want[i:i + 2])[0] - ((struct.unpack("<H", want[i:i + 2])[0] >> 1) & 0x3DEF)) for i in range(0, len(want), 2))
         assert row == want, (cx, cy, r, row.hex(), want.hex())
 
 
@@ -178,15 +178,22 @@ def px(fb, x, y):
 
 st["frames"] = [(103, 126, 16), (188, 126, 16), (103, 270, 8), (700, 400, 31)]
 fb = run()
-assert px(fb, 103 - 24, 126) == (28, 4, 2) and px(fb, 103, 126 - 24) == (28, 4, 2)    # outline grey 16: the category colour
-assert px(fb, 103 + 23, 126 + 23) == (28, 4, 2) and px(fb, 103 - 22, 126 + 22) == (28, 4, 2)
-assert px(fb, 188 - 24, 126) == (0, 0, 0) or True                                       # (colour 0 for image 40's own entry below)
-assert px(fb, 103 - 24, 270) == (14, 2, 1)                                              # grey 8: half the colour
-assert px(fb, 700 - 24, 400) == (31, 31, 31)                                            # white (selected): untouched
+assert px(fb, 103 - 24, 126) == (14, 2, 1) and px(fb, 103, 126 - 24) == (14, 2, 1)      # a plain outline (grey 16): half the category colour
+assert px(fb, 103 + 23, 126 + 23) == (14, 2, 1) and px(fb, 103 - 22, 126 + 22) == (14, 2, 1)
+assert px(fb, 103 - 24, 270) == (7, 1, 1)                                               # grey 8 (a dimmer frame): a quarter
+assert px(fb, 700 - 24, 400) == (27, 4, 2)                                              # white (selected): the whole colour, not white
 assert px(fb, 103 - 20, 126) == (0, 0, 0)                                               # outside the outline band: nothing
-assert px(fb, 103 - 3, 126 - 3) != (28, 4, 2)                                           # the blanked square / picture inside
+assert px(fb, 103 - 3, 126 - 3) != (14, 2, 1)                                           # the blanked square / picture inside
 fb2 = run()
-assert fb2 == fb and st["reads"] == []                             # a second paint: the same, no reads
+assert fb2 == fb and st["reads"] == []
+# the tuning words: a selected (white) frame goes toward the category colour with sel_mix, the dimming follows dim_shift / dim_mask
+mu.mem_write(BASE + 0x40C, struct.pack("<2I", 2, 0x1CE7))           # dim_shift 2, dim_mask 0x1ce7: three quarters
+fb4 = run()
+want = struct.unpack("<H", bytes([0x20, 0x41]))[0]
+src = struct.unpack("<H", bytes([0x20, 0x40]))[0]
+got = struct.unpack("<H", fb4[((126 - S // 2) * 800 + 188 - S // 2) * 2:][:2])[0]
+assert got == src - ((src >> 2) & 0x1CE7), (hex(got), hex(src))
+mu.mem_write(BASE + 0x40C, struct.pack("<2I", 1, 0x3DEF))                             # a second paint: the same, no reads
 # a square larger than the picture is blanked first (the stock icon under it): stock pixels in the 8 x 8 are gone
 mu.mem_write(FB, b"\xff" * (800 * 480 * 2))
 mu.reg_write(UC_ARM_REG_R0, VIEW); mu.reg_write(UC_ARM_REG_R1, FB)
