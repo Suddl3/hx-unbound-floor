@@ -54,6 +54,16 @@ Test images (not for playing): `--meter` replaces the NAM output with numbers ab
 (cycles, the instance's memory, the guard state; read them from USB 1 at 48 kHz), `--probe` runs
 a tap-list DMA probe, `--diag` beeps a code where the block would be silent.
 
+Optional extras (each its own environment flag; none is on by default):
+`NAM_DSP_METER=1` the DSP meter and its two Preferences settings (page 2: DSP Meter / Blocks and DSP Meter / Paths; their
+values are **Blocks 0 = On, 1 = Off** and **Paths 0 = Off, 1 = Meters, 2 = Numbers**, defaults Off and Meters, so a fresh
+install shows bars only); `NAM_FOCUS_VIEW=1` Focus View (Home's block-selection key; also hooks the UI event post; implied
+by `NAM_EMMC_ART=1`); `NAM_EMMC_ART=1` the pictures from the eMMC store (needs the meter); `NAM_SCREEN_MIRROR=1` the editor's
+screen mirror. A plain `NAM_DSP_METER=1` build leaves the event post stock and never enters Focus View.
+Every build prints the partition guard's table (each entry against its partition; `floor_hxf.py pack` refuses an image
+that does not fit, whatever script calls it) and, when the mirror or meter is on, writes `<out>.hxf.live.json` (the
+modules' addresses and the image's MD5: copy it to `floor/auto/live.json` or set `HX_LIVE_JSON` for the live tools).
+
 ## Captures
 
 Use upstream's converter (`web/`, or its hosted setup page) to turn a `.nam` A2 Lite file into a

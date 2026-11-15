@@ -40,6 +40,7 @@
 .equ TBL, 0x29A00000
 .equ MAGICI, 0x49505848             @ "HXPI"
 .equ HDR_SEC, 10                    @ header sectors; the pictures follow it in RAM
+.equ MAXSEC, 10230                  @ picture sectors that fit: 0x29a00000 + 10 sectors up to 0x29f00000 (live code)
 .equ NAM_PID, 1912                  @ header: u16 the NAM block's preset id; +1920 u16 picture[128] by capture slot
 .equ NAM_TAB, 1920
 .equ COLOURS, 2304                  @ header: u16 category colour[1024] by stock frame image index
@@ -78,7 +79,19 @@ fh_icons:
     bne fh_fail
     ldrh r8, [r6, #12]
     ldrh r0, [r6, #14]
+    ldrh r1, [r6, #4]               @ the store's own numbers are checked before they size a read or a copy: S 1..44 (the
+    subs r2, r1, #1                 @ frame's inside), the sectors a picture holds S x S pixels, and the pictures fit the RAM
+    cmp r2, #43                     @ set aside (TBL up to the live code at 0x29f00000)
+    bhi fh_fail
+    mul r1, r1, r1
+    lsls r1, r1, #1
+    lsls r2, r0, #9
+    cmp r1, r2
+    bhi fh_fail
     mul r8, r0, r8                 @ sectors of pictures
+    movw r1, #MAXSEC
+    cmp r8, r1
+    bhi fh_fail
     ldr r9, [r6, #8]                @ their first sector
     add.w r10, r6, #(HDR_SEC * 512)
 fh_chunk:
@@ -172,6 +185,9 @@ fh_pic:
     movw r1, #0xffff
     cmp r10, r1
     beq fh_next
+    ldrh r1, [r6, #12]
+    cmp r10, r1
+    bhs fh_next                     @ a map entry past the stored pictures
     lsrs r0, r9, #3
     add.w r1, r6, #16
     ldrb r0, [r1, r0]

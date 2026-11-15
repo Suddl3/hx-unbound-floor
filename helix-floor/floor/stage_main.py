@@ -13,6 +13,7 @@
 
 usage: stage_main.py <in.l6ia> <out.l6ia>
 """
+import json
 import struct
 import sys
 
@@ -409,6 +410,21 @@ def verify(e0, src_ni, new_ni, addrs, xeno_ni=None):
     return "read back: pointers, counts, new rows, trampoline and HOOK bytes as built"
 
 
+def live_addresses(addrs):
+    """What auto/floor_poke.py's live.json holds for this build (the build writes it beside its output, so no tool has to
+    guess or keep a stale one): the mirror and meter modules' bases and the words the live tools use."""
+    mirror, meter = addrs[6], addrs[7]
+    live = {}
+    if mirror:
+        live["mirror"] = hex(mirror[0])
+        live["fm_ptr"] = hex(mirror[0] + mirror[2]["fm_ptr"])
+    if meter:
+        live["meter"] = hex(meter[0])
+        live["dm_imgs"] = hex(meter[0] + meter[2]["dm_imgs"])
+        live["dm_cfg"] = hex(meter[0] + meter[2]["dm_cfg"])
+    return live
+
+
 def main():
     src, out = sys.argv[1], sys.argv[2]
     data, _ = pa.load_l6ia_from_any(src)
@@ -435,6 +451,10 @@ def main():
     open(out, 'wb').write(img)
     for line in log + [msg]:
         print(line)
+    live = live_addresses(addrs)
+    if live:
+        json.dump(live, open(out + ".live.json", "w"), indent=1)
+        print(f"wrote {out}.live.json: {live}")
     print(f"wrote {out}")
 
 

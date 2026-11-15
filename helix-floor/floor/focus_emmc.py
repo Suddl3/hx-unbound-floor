@@ -2,7 +2,8 @@
 (env NAM_EMMC_ART=1; needs NAM_DSP_METER=1).
 
 m4/focus_emmc.s goes after segment 1's bytes (local SRAM 0x10088a30 + 0x3008 = 0x1008ba38: up to the bank's end at
-0x10092000 the run-time contents were only the boot memory test's pattern). Two patches in the DSP meter module point at
+0x10092000 the run-time contents were only the boot memory test's pattern: unproven; FINDINGS has the correction and a way to
+prove it, a watch on that range over a session). Two patches in the DSP meter module point at
 it: Focus View's focus_img jumps to fe_img (the big picture), and the end of dm_paint calls fe_hook (Focus View's own
 fill as before, else the small model picture inside each path block). The pictures themselves are written once with
 auto/floor_emmc_art.py (write: the big ones, icons: the small ones) and are never part of the firmware.
@@ -95,3 +96,34 @@ def append_to_seg1(e0, segments, code):
         struct.pack_into("<3I", out, h + delta, l, d, n + delta)
     struct.pack_into("<I", out, 4, len(out))
     return bytes(out)
+
+
+SRC = os.path.join(HERE, "m4", "focus_emmc.s")
+
+
+def assemble(check=False):
+    """Assemble m4/focus_emmc.s with zig's clang (pip install ziglang), as dsp_meter.py does; check=True only compares
+    with the committed m4/focus_emmc.bin, otherwise it rewrites it."""
+    import subprocess
+    import sys
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        obj, binary = os.path.join(d, "m.o"), os.path.join(d, "m.bin")
+        env = dict(os.environ, ZIG_LOCAL_CACHE_DIR=os.path.join(d, "lc"), ZIG_GLOBAL_CACHE_DIR=os.path.join(d, "gc"))
+        zig = [sys.executable, "-m", "ziglang"]
+        subprocess.run(zig + ["cc", "-target", "thumb-freestanding-eabi", "-mcpu=cortex_m4", "-c", SRC, "-o", obj],
+                       check=True, timeout=60, env=env)
+        subprocess.run(zig + ["objcopy", "-O", "binary", "-j", ".text", obj, binary], check=True, timeout=60, env=env)
+        code = open(binary, "rb").read()
+    if check:
+        if open(BIN, "rb").read() != code:
+            raise ValueError("Assembled focus_emmc bytes differ from the committed binary.")
+    else:
+        open(BIN, "wb").write(code)
+    return code
+
+
+if __name__ == "__main__":
+    import sys
+    if "--assemble" in sys.argv or "--check" in sys.argv:
+        print(len(assemble(check="--check" in sys.argv)), "bytes")

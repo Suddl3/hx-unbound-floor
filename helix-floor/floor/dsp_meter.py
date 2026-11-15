@@ -26,6 +26,10 @@ SRC = os.path.join(HERE, "m4", "floor_dsp_meter.s")
 BIN = os.path.join(HERE, "m4", "floor_dsp_meter.bin")
 SYMS = os.path.join(HERE, "m4", "floor_dsp_meter.json")
 ENABLED = os.environ.get("NAM_DSP_METER") == "1"
+# Focus View (Home's block-selection key flips it) has its own flag: NAM_FOCUS_VIEW=1, implied by NAM_EMMC_ART=1 (its
+# pictures). Without it the UI event post is left stock, so a plain NAM_DSP_METER=1 build never enters Focus View and
+# never asks the image store for the big picture (image 1093 + id, which a stock Entry 9 does not have).
+FOCUS = ENABLED and (os.environ.get("NAM_FOCUS_VIEW") == "1" or os.environ.get("NAM_EMMC_ART") == "1")
 POST = 0x2808b668                           # the UI event post: Home flips Focus View (dm_event)
 PAINT_LIT, PAINT = 0x2809372c, 0x280d6be9    # the home view's paint, as the boot registers it (ldr r0 at 0x28093590)
 # Global Settings > Preferences, page 2 (Auto Impedance, Link Dual Cabs, then four empty slots): two spare main-store IDs
@@ -128,11 +132,12 @@ def tramp(target):
     return bytes.fromhex("5ff800f0") + struct.pack("<I", target | 1)
 
 
-def patches(code_va, syms):
-    """{address: bytes} of every change outside the cave."""
+def patches(code_va, syms, focus=None):
+    """{address: bytes} of every change outside the cave (the event post only with Focus View)."""
     out = {PAINT_LIT: struct.pack("<I", (code_va + syms["dm_paint"]) | 1),
-           TEXT_FN: tramp(code_va + syms["dm_text"]),
-           POST: tramp(code_va + syms["dm_event"])}
+           TEXT_FN: tramp(code_va + syms["dm_text"])}
+    if FOCUS if focus is None else focus:
+        out[POST] = tramp(code_va + syms["dm_event"])
     for sid, label, slot in SETTINGS:
         assert len(label) < LABEL
         for table in (LABELS_LONG, LABELS_SHORT):

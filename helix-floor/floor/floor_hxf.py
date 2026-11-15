@@ -23,13 +23,20 @@ import hxf  # noqa: E402
 FLOOR_MD5 = "805caa03e8a30fd6ff7892f32ed5a9f4"
 
 
-def pack(payload, donor_raw):
+def pack(payload, donor_raw, guard=True):
+    """guard=False only for the container selftest (a payload that is not a real image)."""
     chunks = hxf._chunks(donor_raw)
     head = bytearray([b for c, p, s, b in chunks if c == b'HEAD'][0])
     dinfs = [bytearray(b) for c, p, s, b in chunks if c == b'dinf']
     assert len(dinfs) == 1 and struct.unpack('>IIII', dinfs[0][:16])[0::2] == (0, 0), \
         "not the Floor's one-dinf layout (kind 0, offset 0)"
     assert payload[:4] == b'L6IA', "payload is not an L6IA image"
+    if guard:
+        import partition_guard                    # never write an entry past its eMMC partition (FOCUS11 overwrote user IRs)
+        bad, lines = partition_guard.check_data(payload)
+        print(os.linesep.join(lines))
+        if bad:
+            sys.exit("PARTITION GUARD: " + "; ".join(bad) + " - no .hxf written")
     struct.pack_into('>I', head, 16, len(payload))
     head[20:36] = hashlib.md5(payload).digest()
     struct.pack_into('>I', dinfs[0], 12, len(payload))
@@ -46,10 +53,10 @@ def selftest(stock, scratch):
     assert hashlib.md5(raw).hexdigest() == FLOOR_MD5, "not the stock Floor 3.80.0 .hxf"
     data = [b for c, p, s, b in hxf._chunks(raw) if c == b'data'][0]
     payload = zlib.decompress(data)
-    same = pack(payload, raw)
+    same = pack(payload, raw, guard=False)
     assert same == raw, "stock payload does not round-trip byte for byte"
     grown = payload + b'\0' * 16                       # (not a valid image: only the container is checked)
-    out = pack(grown, raw)
+    out = pack(grown, raw, guard=False)
     ch = {c: b for c, p, s, b in hxf._chunks(out)}
     assert struct.unpack('>I', ch[b'dinf'][12:16])[0] == len(grown)
     assert struct.unpack('>I', ch[b'HEAD'][16:20])[0] == len(grown)

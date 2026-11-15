@@ -31,12 +31,20 @@ BULK_SET, BULK_UNSET, BULK_PTR = 68, 82, 92
 BULK_AT = 0x29f00800
 RAM = ((0x10000000, 0x10020000), (0x10080000, 0x10092000), (0x20000000, 0x20010000), (0x28000000, 0x2A000000))
 BULK_CHUNK = 496                # an editor request is 512 bytes at most (longer ones are cut): 9 bytes of map + str16 header
-LIVE =os.path.join(os.path.dirname(os.path.abspath(__file__)), "live.json")
+LIVE = os.environ.get("HX_LIVE_JSON") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "live.json")
 
 
 def live():
+    """The addresses of the image on the unit: build_floor2.py writes <out.hxf>.live.json (copy it to live.json here, or set
+    HX_LIVE_JSON to it). Every address is checked against the RAM ranges, so a stale or hand-edited file cannot aim a write
+    outside RAM. (Host-side only: the firmware's fm_peekset itself takes any address, there is no room left in the cave
+    for a check there.)"""
     with open(LIVE) as f:
-        return {k: int(v, 0) if isinstance(v, str) and v.startswith("0x") else v for k, v in json.load(f).items()}
+        out = {k: int(v, 0) if isinstance(v, str) and v.startswith("0x") else v for k, v in json.load(f).items()}
+    for k, v in out.items():
+        if isinstance(v, int):
+            assert any(lo <= v < hi for lo, hi in RAM), f"{LIVE}: {k} = {v:#x} is not RAM"
+    return out
 
 
 class Poke:

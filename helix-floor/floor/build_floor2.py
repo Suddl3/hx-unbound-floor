@@ -74,15 +74,19 @@ def main():
         bf.run(os.path.join(HERE, "stage_art.py"), s4, s4 + ".art", art, os.environ.get("NAM_ART_SIZE", "128"))
         os.replace(s4 + ".art", s4)
         os.replace(s4 + ".art.art.json", out + ".art.json")
-    import partition_guard                   # never write an entry past its eMMC partition (FOCUS11 overwrote user IRs)
-    bad, _ = partition_guard.check(s4)
-    if bad:
-        sys.exit("PARTITION GUARD: " + "; ".join(bad) + "\nno .hxf written")
+    # (the partition guard runs inside floor_hxf.pack below and prints its table into this log)
     rep = bf.report(s0, s4)
     print(rep)
     open(os.path.join(b, "CHANGES_NAM2.txt" if os.environ.get("NAM_555_VARIANT", "hybrid") == "hybrid" else
                       f"CHANGES_NAM555_{os.environ['NAM_555_VARIANT'].upper()}.txt"), "w").write(rep + "\n")
     bf.run(os.path.join(HERE, "floor_hxf.py"), "pack", s4, out, "--donor", stock)
+    if os.path.exists(s4 + ".live.json"):            # the live tools' addresses for this exact image, beside the .hxf
+        import json
+        live = json.load(open(s4 + ".live.json"))
+        live["hxf_md5"] = hashlib.md5(open(out, 'rb').read()).hexdigest()
+        json.dump(live, open(out + ".live.json", "w"), indent=1)
+        os.remove(s4 + ".live.json")
+        print(f"wrote {out}.live.json (copy it to auto/live.json, or point HX_LIVE_JSON at it, to use the live tools)")
     for f in (s1, s2, s3):
         os.remove(f)
     print(f"\nDone: {out}\nPersonal build. MD5 {hashlib.md5(open(out, 'rb').read()).hexdigest()}")

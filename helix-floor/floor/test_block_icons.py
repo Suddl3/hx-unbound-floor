@@ -18,7 +18,7 @@ HDR_SEC = 10
 FIRST = STORE + HDR_SEC
 
 
-def machine(store=True):
+def machine(store=True, hs=S, hnpic=NPIC, hspp=SPP):     # hs / hnpic / hspp: what the header claims (the bounds test)
     mu = Uc(UC_ARCH_ARM, UC_MODE_THUMB | UC_MODE_MCLASS)
     for b, s in ((0x10000000, 0x100000), (0x28000000, 0x2000000), (0x20000000, 0x10000)):
         mu.mem_map(b, s)
@@ -32,7 +32,7 @@ def machine(store=True):
         mp[3], mp[7], mp[9] = 2, 0, 1
         bitmap = bytearray(128)
         bitmap[40 >> 3] |= 1 << (40 & 7)       # image index 40: a bypassed frame
-        hdr = struct.pack("<4sHHIHH", b"HXPI", S, NIDS, FIRST, NPIC, SPP) + bytes(bitmap) + struct.pack(f"<{NIDS}H", *mp)
+        hdr = struct.pack("<4sHHIHH", b"HXPI", hs, NIDS, FIRST, hnpic, hspp) + bytes(bitmap) + struct.pack(f"<{NIDS}H", *mp)
         hdr += bytes(1912 - len(hdr)) + struct.pack("<H", 380) + bytes(6)
         nam = [0xFFFF] * 128
         nam[0], nam[4] = 3, 1                       # capture slots 1 and 5: pictures 3 and 1
@@ -233,4 +233,18 @@ st["ids"] = {1: 3}
 widget(0, 0, 10, 103, 126)
 assert not any(run()) and st["reads"] == [(STORE, HDR_SEC)]
 assert not any(run()) and st["reads"] == []
-print("block icons: block ids, 48 x 48 frames only, map, bypassed frames halved, blanked ring, cache, focus view, no store: OK")
+# a header outside the bounds is refused before anything is read into RAM or drawn: S 0 or 45+, sectors a picture too
+# few for S x S pixels, more picture sectors than the RAM set aside (10230)
+for bad in (dict(hs=0), dict(hs=45), dict(hs=60), dict(hspp=0), dict(hnpic=4000, hspp=4)):
+    mu, st, widget, run = machine(**bad)
+    st["ids"] = {1: 3}
+    widget(0, 0, 10, 103, 126)
+    assert not any(run()) and st["reads"] == [(STORE, HDR_SEC)], (bad, st["reads"])
+    assert not any(run()) and st["reads"] == [], bad                 # state 2: no store, no more reads
+# the edges are accepted: S 44 with its 8 sectors a picture
+mu, st, widget, run = machine(hs=44, hspp=(44 * 44 * 2 + 511) // 512, hnpic=4)
+st["ids"] = {1: 3}
+widget(0, 0, 10, 103, 126)
+run()
+assert len(st["reads"]) > 1, st["reads"]
+print("block icons: block ids, 48 x 48 frames only, map, bypassed frames halved, blanked ring, cache, focus view, no store, bounds: OK")
