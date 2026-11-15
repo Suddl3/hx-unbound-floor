@@ -25,8 +25,9 @@ STEP = 5 * (1 << 17)                    # the window's useful step: 5 x 128 KB =
 
 
 class Peek:
-    def __init__(self):
-        self.ctl = hx_ctl.HxCtl(pid=0x4248, timeout=10.0)
+    def __init__(self, ctl=None):
+        self.own = ctl is None                    # a shared session (floor_poke.Poke's) stays open
+        self.ctl = ctl or hx_ctl.HxCtl(pid=0x4248, timeout=10.0)
         self.m = floor_mirror.Mirror(self.ctl)
 
     def window(self, base):
@@ -73,7 +74,8 @@ class Peek:
         try:
             self.screen()
         finally:
-            self.ctl.close()
+            if self.own:
+                self.ctl.close()
 
 
 def num(s):

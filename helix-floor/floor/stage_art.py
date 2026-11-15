@@ -65,7 +65,7 @@ def add_by_preset_id(e9, size):
     import art_map
     from PIL import Image
     m = art_map.build()
-    pix = [rgb555(Image.open(os.path.join(art_map.RES, p)), size) for p in m["pictures"]]
+    pix = [rgb555(art_map.open_picture(p), size) for p in m["pictures"]]
     magic, ver, count, table, doff, _ = struct.unpack_from("<6I", e9, 0)
     assert magic == E9_MAGIC, "Entry 9 is not the image pixels"
     recs = [struct.unpack_from("<2I", e9, table + 8 * i) for i in range(count)]

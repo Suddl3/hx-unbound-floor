@@ -35,7 +35,7 @@ def blob(size):
     out = bytearray(struct.pack("<HHI", size, n, head) + struct.pack(f"<{n}H", *mp))
     out += bytes(head - len(out))
     for p in m["pictures"]:
-        out += rgb555(Image.open(os.path.join(art_map.RES, p)), size)
+        out += rgb555(art_map.open_picture(p), size)
     assert PICS + len(out) <= CODE - 0x1800, f"{len(out)} bytes: too big for the free RAM (a smaller size)"
     return bytes(out), len(m["pictures"])
 

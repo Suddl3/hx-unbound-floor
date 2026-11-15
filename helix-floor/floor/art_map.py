@@ -18,6 +18,23 @@ import sys
 RES = os.environ.get("HX_EDIT_RES", r"C:\Program Files (x86)\Line6\HX Edit\res")
 
 
+def open_picture(rel, res=None):
+    """The picture as a PIL image. HX Edit's I/O icons are sprite sheets named "..._%N.png" (N frames of a square
+    stacked top to bottom, one per I/O choice, e.g. icon-outputs_%14.png is 72 x 1008): frame 0 is empty and frame 1
+    is the "None" cross, so frame 2 (the first real choice: Multi's arrow, the guitar input) is taken when there is one,
+    else the first frame with something drawn."""
+    import re
+    from PIL import Image
+    im = Image.open(os.path.join(res or RES, rel))
+    m = re.search(r"%(\d+)\.png$", rel)
+    if m and im.height >= int(m.group(1)) * im.width // 2:
+        h = im.height // int(m.group(1))
+        frames = [im.crop((0, k * h, im.width, (k + 1) * h)) for k in range(int(m.group(1)))]
+        drawn = [f for f in frames if f.convert("RGBA").getchannel("A").getbbox()]
+        im = frames[2] if len(frames) > 2 and frames[2] in drawn else (drawn or frames)[0]
+    return im
+
+
 def walk(node, cat_img, out):
     """Every model ({"id": symbol, "image": png}) under a category, with that category's picture."""
     if isinstance(node.get("id"), str):
