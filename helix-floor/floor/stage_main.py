@@ -283,13 +283,14 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
     fe = None
     if focus_emmc.ENABLED:                             # NAM_EMMC_ART=1: Focus View's pictures from the eMMC store
         assert meter, "NAM_EMMC_ART needs NAM_DSP_METER"
-        off, jb = focus_emmc.meter_patch(meter[0], meter[1])
-        k = meter[0] - CAVE + off
-        cave[k:k + len(jb)] = jb
+        mpatch, focus_fill = focus_emmc.patches(meter[0], meter[1])
         dpatched = bytearray(meter[1])
-        dpatched[off:off + len(jb)] = jb
-        meter = (meter[0], bytes(dpatched), meter[2])   # verify() reads the module back with the jump in
-        fe = (focus_emmc.load(), meter[0] + off, jb)
+        for off, jb in mpatch.items():
+            cave[meter[0] - CAVE + off:meter[0] - CAVE + off + len(jb)] = jb
+            dpatched[off:off + len(jb)] = jb
+        meter = (meter[0], bytes(dpatched), meter[2])   # verify() reads the module back with the patches in
+        fe = (focus_emmc.with_literals(focus_emmc.load(), meter[0] + meter[2]["dm_cfg"], focus_fill),
+              [(meter[0] + off, jb) for off, jb in mpatch.items()])
     # pointers and counts (all in seg2: the file offsets don't move with seg0's growth... they do,
     # so everything is written before the cave is spliced in)
     for p in TAB1_BASE_PTRS:
@@ -329,7 +330,7 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
     if fe:
         out = bytearray(focus_emmc.append_to_seg1(bytes(out), segments, fe[0]))
         log.append(f"Focus View from the eMMC store: {len(fe[0])} B at {focus_emmc.VA:#x} (after segment 1); "
-                   f"focus_img {fe[1]:#x} -> ldr.w pc, [pc] ; .word {focus_emmc.VA | 1:#x}")
+                   "focus_img -> fe_img, the end of dm_paint -> bl fe_hook (the block icons)")
     out = l6ia.fix_internal_crcs(bytes(out))
     log.append(f"seg0 {l0:#x} -> {l0 + delta:#x} bytes (cave {CAVE:#x}..{CAVE + delta:#x}, "
                f"{CAVE_END - CAVE - delta} bytes left); Entry 0 {len(e0):#x} -> {len(out):#x}")
@@ -347,7 +348,8 @@ def verify(e0, src_ni, new_ni, addrs, xeno_ni=None):
     im = Image(e0)
     a1, a2, la, ca, cb, tcode, mirror, meter, fe = addrs
     if fe:
-        assert im.rd(focus_emmc.VA, len(fe[0])) == fe[0] and im.rd(fe[1], len(fe[2])) == fe[2], "Focus View eMMC reader"
+        assert im.rd(focus_emmc.VA, len(fe[0])) == fe[0], "Focus View eMMC reader"
+        assert all(im.rd(va, len(b)) == b for va, b in fe[1]), "Focus View eMMC reader's patches in the DSP meter"
     for va, b in ir_title.site_patches(ca, cb).items():
         assert im.rd(va, len(b)) == b
     assert im.rd(ca, len(tcode)) == tcode

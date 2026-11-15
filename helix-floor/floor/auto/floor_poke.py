@@ -42,6 +42,7 @@ def live():
 class Poke:
     def __init__(self, ctl=None):
         self.own = ctl is None
+        self.bulk = False
         self.ctl = ctl or hx_ctl.HxCtl(pid=0x4248, timeout=10.0)
 
     def close(self):
@@ -80,6 +81,32 @@ class Poke:
         self.at(addr)
         self._send(0xA000 | arg)
 
+    def patch_atomic(self, addr, data, stub=0x29F02100):
+        """Write data (a multiple of 4 bytes, up to 16, addr word aligned) in running code in one go: a stub masks the CPU's
+        interrupts (PRIMASK: no task switch) for the few stores, so the paint task never sees half an instruction. Only a
+        mask of the processor's interrupts for about a microsecond; no clock, power or thermal setting is touched."""
+        assert addr % 4 == 0 and len(data) % 4 == 0 and 0 < len(data) <= 16
+        words = struct.unpack(f"<{len(data) // 4}I", data)
+        n = len(words)
+        code = [0xB672, 0x4800 | 0]                      # cpsid i; ldr r0, [pc, #imm] (filled below)
+        body = []
+        for i in range(n):
+            body += [0x4900, 0x6001 | (i << 6) & 0x07C0]  # ldr r1, [pc, #imm]; str r1, [r0, #4 i]
+        tail = [0xB662, 0x4770]                          # cpsie i; bx lr
+        total = 2 + len(body) + len(tail)
+        pool = (total * 2 + 3) & ~3                      # the literals start here (word aligned)
+        ins = [code[0], 0x4800 | ((pool - ((2 * 1 + 4) & ~3)) // 4)]
+        pc = 2
+        for i in range(n):
+            off = pool + 4 * (i + 1) - (((2 * (pc)) + 4) & ~3)
+            ins += [0x4900 | (off // 4), 0x6001 | (i << 6)]
+            pc += 2
+        ins += tail
+        blob = struct.pack(f"<{len(ins)}H", *ins)
+        blob += bytes(pool - len(blob)) + struct.pack(f"<{n + 1}I", addr, *words)
+        self.write_bulk(stub, blob) if self.bulk else self.write(stub, blob)
+        self.call(stub)
+
     def enable_bulk(self, base=BULK_AT):
         """Upload m4/live_bulk.bin (byte by byte, ~3 s) and make it command 0x50's params check, so write_bulk works.
         Gone at the next restart."""
@@ -87,6 +114,7 @@ class Poke:
         struct.pack_into("<I", code, BULK_PTR, live()["fm_ptr"])
         self.write(base, code)
         self.call(base + BULK_SET)
+        self.bulk = True
 
     def write_bulk(self, addr, data, chunk=BULK_CHUNK):
         """Write data at addr, chunk bytes a request (enable_bulk first)."""

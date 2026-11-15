@@ -92,6 +92,115 @@ def load():
     print(f"Focus View draws {size}x{size} pictures from the eMMC store")
 
 
+
+ICON_STORE = 0x440000
+ICON_SIZE = 36
+STOCK_L6IA = os.environ.get("NAM_STOCK_L6IA", os.path.join(FLOOR, "..", "build", "floor2_stock.l6ia"))
+
+
+def stock_blocks():
+    """(bypassed-frame bitmap, category colours): for the stock 48 x 48 block frame images (Block_...), by image index (< 1024).
+    Bitmap: the images whose name ends in Off. Colour: the most saturated pixel of the image (the icon's line colour: the
+    category colour, dimmer on the bypassed frames), RGB555; 0 for none."""
+    from upstream import TOOLS
+    sys.path.insert(0, TOOLS)
+    import patch_amp as pa
+    data, _ = pa.load_l6ia_from_any(STOCK_L6IA)
+    e8, e9 = pa.get_entry_swapped(data, 8), pa.get_entry_swapped(data, 9)
+    rtable, count = struct.unpack_from("<2I", e8, 0x14)
+    itable = struct.unpack_from("<I", e9, 12)[0]
+    bm, cols = bytearray(128), [0] * 1024
+    for i in range(min(count, 1024)):
+        off, ln = struct.unpack_from("<2I", e8, 0x24 + 8 * i)
+        name = e8[off:off + ln].split(b"\0")[0].decode("latin1")
+        rec = struct.unpack_from("<12I", e8, rtable + 48 * i)
+        if not name.startswith("Block_") or (rec[5], rec[6]) != (48, 48):
+            continue
+        if name.endswith("Off"):
+            bm[i >> 3] |= 1 << (i & 7)
+        n, o = struct.unpack_from("<2I", e9, itable + 8 * rec[2])
+        best = (0, 0, 0)
+        for k in range(0, n, 2):
+            v = struct.unpack_from("<H", e9, o + k)[0]
+            r, g, b = v >> 10 & 31, v >> 5 & 31, v & 31
+            sat = max(r, g, b) - min(r, g, b)
+            if (sat, max(r, g, b)) > best[:2]:
+                best = (sat, max(r, g, b), v)
+        cols[i] = best[2] if best[0] >= 3 else 0
+    return bytes(bm), cols
+
+
+def icons_build(size=ICON_SIZE):
+    import art_map
+    from stage_art import rgb555
+    m = art_map.build()
+    n = len(m["symbols"])
+    mp = [m["ids"].get(pid, 0xFFFF) for pid in range(n)]
+    spp = (size * size * 2 + 511) // 512
+    first = ICON_STORE + HDR_SECTORS
+    bitmap, cols = stock_blocks()
+    hdr = struct.pack("<4sHHIHH", b"HXPI", size, n, first, len(m["pictures"]), spp) + bitmap
+    hdr += struct.pack(f"<{n}H", *mp)
+    assert len(hdr) <= 2048
+    hdr += bytes(2048 - len(hdr)) + struct.pack("<1024H", *cols)
+    assert len(hdr) <= HDR_SECTORS * 512
+    hdr += bytes(HDR_SECTORS * 512 - len(hdr))
+    pics = []
+    for pth in m["pictures"]:
+        px = rgb555(art_map.open_picture(pth), size)
+        pics.append(px + bytes(spp * 512 - len(px)))
+    return hdr, b"".join(pics), spp
+
+
+def icons_write(size=ICON_SIZE):
+    hdr, data, spp = icons_build(size)
+    total = len(data) // 512
+    print(f"icon store: {total} sectors ({len(data) / 1e6:.2f} MB) of {size} x {size} pictures at {ICON_STORE + HDR_SECTORS:#x}")
+    with floor_poke.Poke() as p:
+        p.enable_bulk()
+        probe = floor_emmc.read(p, ICON_STORE, 8) + floor_emmc.read(p, ICON_STORE + total, 8)
+        if any(probe) and probe[:4] != b"HXPI":
+            raise SystemExit("the icon store's sectors are not blank: refusing to write over them")
+        step = floor_emmc.MAX // spp * spp * 512
+        for off in range(0, len(data), step):
+            floor_emmc.write(p, ICON_STORE + HDR_SECTORS + off // 512, data[off:off + step])
+        floor_emmc.write(p, ICON_STORE, hdr)
+        assert floor_emmc.read(p, ICON_STORE, HDR_SECTORS) == hdr
+        for k in (0, len(data) // (spp * 512) - 1):
+            assert floor_emmc.read(p, ICON_STORE + HDR_SECTORS + k * spp, spp) == data[k * spp * 512:(k + 1) * spp * 512]
+    print("written and checked")
+
+
+def icons_live():
+    """Block icons without an install: the new module over the old one at 0x1008ba38, then the meter's two patches."""
+    import focus_emmc
+    lv = floor_poke.live()
+    meter = lv["meter"]
+    mcode = open(os.path.join(FLOOR, "m4", "floor_dsp_meter.bin"), "rb").read()
+    mpatch, focus_fill = focus_emmc.patches(meter, mcode)
+    code = focus_emmc.with_literals(focus_emmc.load(), meter + json_sym("dm_cfg"), focus_fill)
+    with floor_poke.Poke() as p:
+        p.enable_bulk()
+        site = focus_emmc.hook_site(mcode)                       # the module may be running: take the call out of dm_paint first
+        p.patch_atomic(meter + site, mcode[site:site + 12])
+        time.sleep(1.0)
+        p.write_bulk(focus_emmc.VA, code)                       # (Focus View must be off: fe_img moved to +0x400)
+        for off, b in sorted(mpatch.items()):
+            at = meter + off
+            head = (4 - at % 4) % 4                              # the 2-mod-4 jump starts with a nop, then a word-aligned ldr.w
+            a = at - (at % 4)
+            cur = bytearray(mcode[off - (at % 4):off - (at % 4) + ((len(b) + (at % 4) + 3) // 4) * 4])
+            cur[at % 4:at % 4 + len(b)] = b
+            for i in range(0, len(cur), 12):
+                p.patch_atomic(a + i, bytes(cur[i:i + 12]))
+    print("block icons live: module uploaded, focus_img -> fe_img, dm_paint -> fe_hook (a Floor restart undoes it)")
+
+
+def json_sym(name):
+    import json
+    return json.load(open(os.path.join(FLOOR, "m4", "floor_dsp_meter.json")))[name]
+
+
 def erase():
     with floor_poke.Poke() as p:
         p.enable_bulk()
@@ -105,6 +214,10 @@ def main():
         write(int(a[1]) if len(a) > 1 else 128)
     elif a and a[0] == "load":
         load()
+    elif a and a[0] == "icons":
+        icons_write(int(a[1]) if len(a) > 1 else ICON_SIZE)
+    elif a and a[0] == "icons-live":
+        icons_live()
     elif a and a[0] == "erase":
         erase()
     else:
