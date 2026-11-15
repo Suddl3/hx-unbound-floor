@@ -14,7 +14,17 @@ SPP = (S * S * 2 + 511) // 512
 FIRST = STORE + 8
 
 
-def machine(with_store=True):
+BGFIRST, Y0, ROWS, BGN = 0x460000, 52, 8, 2          # backgrounds: 2 of 8 rows of 800 pixels, from row 52
+BGSPB = (ROWS * 1600 + 511) // 512
+
+
+def bg_section(count=BGN, spb=BGSPB, y0=Y0, rows=ROWS, magic=b"HXBG", slots=None):
+    slots = slots if slots is not None else {5: 1, 9: 0, 7: 0xFF}
+    sec = magic + struct.pack("<HHIHH", count, spb, BGFIRST, y0, rows)
+    return sec + bytes(slots.get(i, 0xFF) for i in range(N))
+
+
+def machine(with_store=True, bg=None):
     mu = Uc(UC_ARCH_ARM, UC_MODE_THUMB | UC_MODE_MCLASS)
     for b, s in ((0x10000000, 0x100000), (0x28000000, 0x2000000), (0x20000000, 0x10000)):
         mu.mem_map(b, s)
@@ -25,9 +35,16 @@ def machine(with_store=True):
     emmc = {}
     if with_store:
         mp = [0xffff] * N
-        mp[5], mp[9] = 2, 0
+        mp[5], mp[9], mp[7] = 2, 0, 1
         hdr = b"HXPC" + bytes(12) + struct.pack("<HHI", S, N, FIRST) + struct.pack(f"<{N}H", *mp)
         hdr += bytes(8 * 512 - len(hdr))
+        if bg is not None:
+            hdr = hdr[:2048] + bg + hdr[2048 + len(bg):]
+            for k in range(BGN):                          # background k: row r is bytes [0xA0 + k, r] x 800
+                data = b"".join(bytes([0xA0 + k, r]) * 800 for r in range(ROWS)) 
+                data += bytes(BGSPB * 512 - len(data))
+                for j in range(BGSPB):
+                    emmc[BGFIRST + k * BGSPB + j] = data[512 * j:512 * (j + 1)]
         for j in range(8):
             emmc[STORE + j] = hdr[512 * j:512 * (j + 1)]
         for k in range(3):
@@ -91,4 +108,43 @@ assert not any(run(5, fail=True)) and drawn(run(5), 2)                         #
 run, st = machine(with_store=False)
 assert not any(run(5)) and st["reads"] == [(STORE, 8)]                         # no store: the header read once...
 assert not any(run(5)) and st["reads"] == []                                   # ...and never again
+
+def bgdrawn(fb, k):
+    return all(fb[(Y0 + r) * 1600:][:1600] == bytes([0xA0 + k, r]) * 800 for r in range(ROWS))
+
+
+def bgnone(fb):
+    return not any(fb[Y0 * 1600:(Y0 + ROWS) * 1600])
+
+
+# backgrounds: the model's slot is read once (cached), copied into rows y0.., the picture goes over it
+run, st = machine(bg=bg_section())
+fb = run(5)
+assert st["reads"] == [(STORE, 8), (BGFIRST + BGSPB, BGSPB), (FIRST + 2 * SPP, SPP)], st["reads"]
+assert bgdrawn(fb, 1) and drawn(fb, 2)
+fb = run(5)
+assert st["reads"] == [] and bgdrawn(fb, 1) and drawn(fb, 2)                   # background and picture cached
+fb = run(9)
+assert st["reads"] == [(BGFIRST, BGSPB), (FIRST, SPP)] and bgdrawn(fb, 0) and drawn(fb, 0)
+fb = run(7)                                                                    # a picture, slot 0xff: no background
+assert bgnone(fb) and drawn(fb, 1) and all(r[0] != BGFIRST for r in st["reads"])
+assert not any(run(3)) and not any(run(10))                                    # no picture, no block: nothing, as before
+run, st = machine(bg=bg_section())
+run(5)
+fb = run(9, fail=True)                                                                  # a failed background read: no background, and
+assert bgnone(fb), "failed read"                                               # the next paint reads it again
+fb = run(9)
+assert bgdrawn(fb, 0) and drawn(fb, 0) and (BGFIRST, BGSPB) in st["reads"]
+# a header outside the bounds draws no background (the picture still shows)
+for bad in (dict(magic=b"HXBX"), dict(count=251), dict(rows=0), dict(rows=ROWS, y0=480), dict(spb=BGSPB - 1), dict(spb=2000),
+            dict(slots={5: 2}), dict(rows=700, y0=0)):
+    run, st = machine(bg=bg_section(**bad))
+    fb = run(5)
+    assert bgnone(fb) and drawn(fb, 2), bad
+    assert all(not BGFIRST <= r[0] < BGFIRST + 4 * BGSPB for r in st["reads"]), (bad, st["reads"])
+# an old store (no background section): exactly as before
+run, st = machine(bg=None)
+fb = run(5)
+assert bgnone(fb) and drawn(fb, 2) and st["reads"] == [(STORE, 8), (FIRST + 2 * SPP, SPP)]
+print("focus_emmc: backgrounds by slot, cached, bounds: OK")
 print("focus_emmc: header read once, picture by preset id, cache, retry, none / empty / no block, no store: OK")

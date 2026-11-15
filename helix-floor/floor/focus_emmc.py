@@ -5,7 +5,8 @@ m4/focus_emmc.s goes after segment 1's bytes (local SRAM 0x10088a30 + 0x3008 = 0
 0x10092000 the run-time contents were only the boot memory test's pattern: unproven; FINDINGS has the correction and a way to
 prove it, a watch on that range over a session). Two patches in the DSP meter module point at
 it: Focus View's focus_img jumps to fe_img (the big picture), and the end of dm_paint calls fe_hook (Focus View's own
-fill as before, else the small model picture inside each path block). The pictures themselves are written once with
+fill as before, else the small model picture inside each path block). fe_img first draws the model's background (fe_bg:
+bg_store.py's section in the store header) when there is one. The pictures themselves are written once with
 auto/floor_emmc_art.py (write: the big ones, icons: the small ones) and are never part of the firmware.
 Emulator tests: test_focus_emmc.py, test_block_icons.py.
 """

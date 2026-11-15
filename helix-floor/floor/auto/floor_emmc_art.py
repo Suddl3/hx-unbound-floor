@@ -1,15 +1,18 @@
-"""Focus View's pictures stored in the eMMC (past every partition), drawn by m4/emmc_art.bin.
+"""Focus View's pictures stored in the eMMC (past every partition), drawn by the reader built into the firmware (NAM_EMMC_ART=1, m4/focus_emmc.s).
 
-  floor_emmc_art.py write [SIZE]   once: HX Edit's model pictures (art_map.py, the user's own install) at SIZE x SIZE
-                                   (default 128) written to the eMMC from sector 0x400000, then read back to check
-  floor_emmc_art.py load           after each restart (~2 s): the store's header to RAM, emmc_art.bin uploaded and
-                                   Focus View switched to it (Focus View must be off)
+  floor_emmc_art.py write [SIZE] [--scenes DIR --assign FILE]
+                                   once: HX Edit's model pictures (art_map.py, the user's own install) at SIZE x SIZE
+                                   (default 128) written to the eMMC from sector 0x400000, then read back to check. With
+                                   --scenes (a folder of <name>.png, 800 x 480) and --assign (bg_store.py's JSON) every
+                                   picture is stored on the background of its model, and the backgrounds go to sector
+                                   0x460000 (bg_store.py: the layout)
   floor_emmc_art.py erase          zeroes the store's header sectors (the pictures stay but are never read)
 
 Store at 0x400000: sector 0 = "HXPC" + 12 bytes, then the header emmc_art.s reads ({u16 S, u16 preset ids, u32 first
 picture sector, u16 map[preset id]}); pictures from 0x400000 + HDR_SECTORS, each on its own sectors. The card has
 0x760000 sectors; the last partition ends at 0x3b7607; everything sampled past it read as zeros before the first write.
 """
+import json
 import os
 import struct
 import sys
@@ -26,35 +29,62 @@ import floor_poke  # noqa: E402
 STORE = 0x400000
 HDR_SECTORS = 8
 MAGIC = b"HXPC"
-CODE = 0x29F01000
-FOCUS_IMG = 1082                # focus_img's offset in the DSP meter module
-CENTRE_Y = 196
 
 
-def build(size):
+def build(size, scenes=None, assign=None):
     import art_map
     from PIL import Image
     from stage_art import rgb555
     m = art_map.build()
     n = len(m["symbols"])
     mp = [m["ids"].get(pid, 0xFFFF) for pid in range(n)]
+    slots, bgs = [None] * n, []
+    pics = []
+    if scenes:
+        import bg_store
+        assert 2064 + n <= 4096, "the header's background section would not fit its 8 sectors"
+        cats, syms = bg_store.categories()
+        names, slots = bg_store.resolve(assign, n, cats, syms)
+        scn = [bg_store.scene_rgb(os.path.join(scenes, nm + ".png")) for nm in names]
+        bgs = [bg_store.background_bytes(sc) for sc in scn]
+        done = {}
+        for pid in range(n):                              # one stored picture per (picture, background)
+            if mp[pid] == 0xFFFF:
+                continue
+            key = (mp[pid], slots[pid])
+            if key not in done:
+                img = art_map.open_picture(m["pictures"][mp[pid]])
+                done[key] = len(pics)
+                pics.append(rgb555(img, size) if slots[pid] is None else bg_store.composite(scn[slots[pid]], img, size))
+            mp[pid] = done[key]
+    else:
+        pics = [rgb555(art_map.open_picture(p), size) for p in m["pictures"]]
     spp = (size * size * 2 + 511) // 512
-    hdr = MAGIC + struct.pack("<HH", 1, len(m["pictures"])) + bytes(8)
+    hdr = MAGIC + struct.pack("<HH", 1, len(pics)) + bytes(8)
     hdr += struct.pack("<HHI", size, n, STORE + HDR_SECTORS) + struct.pack(f"<{n}H", *mp)
+    assert len(hdr) <= (bg_store.BG_HDR if bgs else HDR_SECTORS * 512)
+    if bgs:
+        hdr += bytes(bg_store.BG_HDR - len(hdr)) + bg_store.section(slots, len(bgs), bg_store.BG_STORE)
     assert len(hdr) <= HDR_SECTORS * 512
     hdr += bytes(HDR_SECTORS * 512 - len(hdr))
-    pics = []
-    for p in m["pictures"]:
-        px = rgb555(art_map.open_picture(p), size)
-        pics.append(px + bytes(spp * 512 - len(px)))
-    return hdr, pics, spp
+    pics = [px + bytes(spp * 512 - len(px)) for px in pics]
+    return hdr, pics, spp, bgs
 
 
-def write(size):
-    hdr, pics, spp = build(size)
+def write(size, scenes=None, assign=None):
+    hdr, pics, spp, bgs = build(size, scenes, assign)
     data = b"".join(pics)
     total = len(data) // 512
-    print(f"{len(pics)} pictures {size}x{size}: {total} sectors ({len(data) / 1e6:.1f} MB) from {STORE + HDR_SECTORS:#x}")
+    print(f"{len(pics)} pictures {size}x{size}: {total} sectors ({len(data) / 1e6:.1f} MB) from {STORE + HDR_SECTORS:#x}"
+          + (f"; {len(bgs)} backgrounds" if bgs else ""))
+    if STORE + HDR_SECTORS + total > ICON_STORE:
+        raise SystemExit(f"the picture store would reach the icon store at {ICON_STORE:#x}: use a smaller SIZE")
+    bg_data = b"".join(bgs)
+    if bgs:
+        import bg_store
+        end = bg_store.BG_STORE + len(bg_data) // 512
+        if end > 0x760000 or bg_store.BG_STORE < ICON_STORE + ICON_MAX_SECTORS + ICON_HDR:
+            raise SystemExit(f"the backgrounds at {bg_store.BG_STORE:#x}..{end:#x} do not fit between the icon store and the card")
     t = time.time()
     with floor_poke.Poke() as p:
         p.enable_bulk()
@@ -62,6 +92,14 @@ def write(size):
         for off in range(0, len(data), step):
             floor_emmc.write(p, STORE + HDR_SECTORS + off // 512, data[off:off + step])
             print(f"  {off + min(step, len(data) - off):>10} / {len(data)} bytes", flush=True)
+        if bgs:
+            bstep = floor_emmc.MAX // bg_store.sectors_per_bg() * bg_store.sectors_per_bg() * 512 or bg_store.sectors_per_bg() * 512
+            for off in range(0, len(bg_data), bstep):
+                floor_emmc.write(p, bg_store.BG_STORE + off // 512, bg_data[off:off + bstep])
+                print(f"  backgrounds {off + min(bstep, len(bg_data) - off):>10} / {len(bg_data)} bytes", flush=True)
+            sp = bg_store.sectors_per_bg()
+            for k in (0, len(bgs) - 1):
+                assert floor_emmc.read(p, bg_store.BG_STORE + k * sp, sp) == bgs[k], f"background {k} read back differs"
         floor_emmc.write(p, STORE, hdr)                  # the header last: a store without one is never read
         back = floor_emmc.read(p, STORE, HDR_SECTORS)
         assert back == hdr, "header read back differs"
@@ -69,28 +107,6 @@ def write(size):
             got = floor_emmc.read(p, STORE + HDR_SECTORS + k * spp, spp)
             assert got == pics[k], f"picture {k} read back differs"
     print(f"written and checked in {time.time() - t:.0f} s")
-
-
-def load():
-    lv = floor_poke.live()
-    code = bytearray(open(os.path.join(FLOOR, "m4", "emmc_art.bin"), "rb").read())
-    struct.pack_into("<I", code, len(code) - 12, lv["dm_imgs"])
-    hdr_ram = struct.unpack_from("<I", code, len(code) - 8)[0]
-    fi = lv["meter"] + FOCUS_IMG
-    assert fi % 4 == 2
-    jump = b"\x00\xbf" + b"\xdf\xf8\x00\xf0" + struct.pack("<I", CODE | 1)    # nop; ldr.w pc, [pc]; .word emmc_img
-    with floor_poke.Poke() as p:
-        p.enable_bulk()
-        hdr = floor_emmc.read(p, STORE, HDR_SECTORS)
-        if hdr[:4] != MAGIC:
-            raise SystemExit("no picture store on the eMMC (floor_emmc_art.py write first)")
-        size = struct.unpack_from("<H", hdr, 16)[0]
-        p.write_bulk(hdr_ram, hdr[16:])
-        p.write_bulk(CODE, bytes(code))
-        p.write(lv["dm_imgs"] + 2, struct.pack("<4H", 400, CENTRE_Y - size // 2, size, size))
-        p.write(fi, jump)
-    print(f"Focus View draws {size}x{size} pictures from the eMMC store")
-
 
 
 ICON_STORE = 0x440000
@@ -152,7 +168,13 @@ def nam_slot_icons():
     return {int(k): capture_icons.pick(v.get("name", "")) for k, v in slots.items() if 1 <= int(k) <= 128},         os.path.join(NAM_ICONS, "nam_capture_icons")
 
 
+ICON_MAX_SIZE = 44              # the frame's inside (m4/focus_emmc.s: the firmware refuses anything else)
+ICON_MAX_SECTORS = 10230        # picture sectors that fit the RAM set aside, 0x29a00000 + header up to the live code at 0x29f00000
+
+
 def icons_build(size=ICON_SIZE):
+    if not 1 <= size <= ICON_MAX_SIZE:
+        raise SystemExit(f"icon size {size}: must be 1..{ICON_MAX_SIZE} (it is drawn inside the 48 x 48 block frame)")
     import art_map
     from PIL import Image
     from stage_art import rgb555
@@ -181,6 +203,9 @@ def icons_build(size=ICON_SIZE):
     assert len(hdr) <= ICON_HDR * 512
     hdr += bytes(ICON_HDR * 512 - len(hdr))
     data = b"".join(px + bytes(spp * 512 - len(px)) for px in pics)
+    if len(data) // 512 > ICON_MAX_SECTORS:
+        raise SystemExit(f"{len(pics)} pictures of {spp} sectors = {len(data) // 512} sectors: the firmware loads them into "
+                         f"{ICON_MAX_SECTORS} sectors of RAM at most; use a smaller size")
     print(f"{len(m['pictures'])} model pictures + {len(ids)} NAM capture icons for {len(by_slot)} capture slots")
     return hdr, data, spp
 
@@ -224,8 +249,8 @@ def icons_live():
             a = at - (at % 4)
             cur = bytearray(mcode[off - (at % 4):off - (at % 4) + ((len(b) + (at % 4) + 3) // 4) * 4])
             cur[at % 4:at % 4 + len(b)] = b
-            for i in range(0, len(cur), 12):
-                p.patch_atomic(a + i, bytes(cur[i:i + 12]))
+            assert len(cur) <= 16, "a patch must go in one patch_atomic (16 bytes), or a paint could see half of it"
+            p.patch_atomic(a, bytes(cur))
     print("block icons live: module uploaded, focus_img -> fe_img, dm_paint -> fe_hook (a Floor restart undoes it)")
 
 
@@ -244,9 +269,12 @@ def erase():
 def main():
     a = sys.argv[1:]
     if a and a[0] == "write":
-        write(int(a[1]) if len(a) > 1 else 128)
-    elif a and a[0] == "load":
-        load()
+        flag = lambda f: a[a.index(f) + 1] if f in a else None
+        rest = [x for x in a[1:] if x not in ("--scenes", "--assign", flag("--scenes"), flag("--assign"))]
+        scenes, assign = flag("--scenes"), flag("--assign")
+        if bool(scenes) != bool(assign):
+            sys.exit("--scenes and --assign go together")
+        write(int(rest[0]) if rest else 128, scenes, json.load(open(assign)) if assign else None)
     elif a and a[0] == "icons":
         icons_write(int(a[1]) if len(a) > 1 else ICON_SIZE)
     elif a and a[0] == "icons-live":

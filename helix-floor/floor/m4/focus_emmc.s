@@ -23,6 +23,10 @@
 .equ ROW, 1600
 .equ CENTRE_X, 400
 .equ CENTRE_Y, 196
+.equ BGCACHE, 0x29940000            @ one background, up to 0xc0000 B (to the icon store's RAM at TBL)
+.equ BGMAX, 0xc0000
+.equ BG_HDR, 2048                   @ in the header read at HDR: "HXBG", u16 count, u16 sectors a background, u32 first sector,
+.equ MAGICBG, 0x47425848            @ u16 y0, u16 rows, then u8 slot[preset id] (0xff none); the PC side is bg_store.py
 .global fe_img, fe_hook
 
 
@@ -588,6 +592,9 @@ fe_ready:
     ldrh r1, [r5, #2]
     cmp r0, r1
     bhs fe_out
+    mov r8, r0
+    bl fe_bg                        @ the model's background first (r0 its preset id, r4 the frame); the picture goes over it
+    mov r0, r8
     add r2, r5, #8
     ldrh r9, [r2, r0, lsl #1]       @ r9 its picture
     movw r1, #0xffff
@@ -642,9 +649,83 @@ fe_out:
     add sp, #0x40
     pop {r4-r10, pc}
 
+@ fe_bg: r0 the preset id, r4 the frame: the background of the model's slot (sectors read into BGCACHE when the slot changes) is
+@ copied into rows y0 .. y0 + rows of the frame. Everything the header says is checked first (magic, count, slot, rows, sectors).
+@ No background section, slot 0xff or a failed read: nothing drawn (the plain black Focus View). Keeps r4-r10.
+fe_bg:
+    push {r5-r9, lr}                @ 6 words: external calls stay 8-byte aligned (fe_img's frame is)
+    ldr r5, =HDR + BG_HDR
+    ldr r1, [r5]
+    ldr r2, =MAGICBG
+    cmp r1, r2
+    bne fb_out
+    ldr r1, =HDR + 18               @ the header's preset id count
+    ldrh r1, [r1]
+    cmp r1, #2000                   @ the slot bytes must stay inside the 8 header sectors
+    bhi fb_out
+    cmp r0, r1
+    bhs fb_out
+    add r1, r5, #16
+    ldrb r6, [r1, r0]               @ r6 the slot
+    ldrh r1, [r5, #4]               @ the count
+    cmp r1, #250
+    bhi fb_out
+    cmp r6, r1
+    bhs fb_out                      @ 0xff: none
+    ldrh r7, [r5, #14]              @ r7 rows
+    ldrh r8, [r5, #12]              @ r8 y0
+    cmp r7, #0
+    beq fb_out
+    add r0, r7, r8
+    cmp r0, #480
+    bhi fb_out
+    movw r0, #1600
+    mul r9, r7, r0                  @ r9 bytes drawn
+    ldr r1, =BGMAX
+    cmp r9, r1
+    bhi fb_out
+    ldrh r0, [r5, #6]               @ sectors a background
+    add r1, r9, #511
+    lsrs r1, r1, #9
+    cmp r0, r1
+    blo fb_out
+    cmp r0, #1024
+    bhi fb_out
+    adr.w r12, fe_bgcached
+    ldr r1, [r12]
+    cmp r1, r6
+    beq fb_draw
+    mvn r1, #0
+    str r1, [r12]                   @ invalid while reading
+    ldr r1, [r5, #8]
+    mla r1, r6, r0, r1              @ its sector
+    mov r2, r0
+    ldr r0, =BGCACHE
+    ldr r3, =READ
+    blx r3
+    cmp r0, #0
+    blt fb_out
+    adr.w r12, fe_bgcached
+    str r6, [r12]
+fb_draw:
+    movw r0, #1600
+    mul r0, r8, r0
+    add r0, r4                      @ the frame's row y0
+    ldr r1, =BGCACHE
+    lsrs r2, r9, #2                 @ words
+fb_copy:
+    ldr r3, [r1], #4
+    str r3, [r0], #4
+    subs r2, #1
+    bne fb_copy
+fb_out:
+    pop {r5-r9, pc}
+
 .ltorg
 .balign 4
 fe_state:
     .word 0                         @ 0 header not read yet, 1 ready, 2 no store
 fe_cached:
     .word 0xffffffff                @ the picture in the cache
+fe_bgcached:
+    .word 0xffffffff                @ the background (slot) in BGCACHE
