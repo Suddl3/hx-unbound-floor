@@ -29,6 +29,7 @@ BULK_BIN = bytes.fromhex(
     "f801cb01f801cbf8e70160002070470648aff2480141f0010101607047034803490160704700bf00000000c4981c28fd770f28")
 BULK_SET, BULK_UNSET, BULK_PTR = 68, 82, 92
 BULK_AT = 0x29f00800
+RAM = ((0x10000000, 0x10020000), (0x10080000, 0x10092000), (0x20000000, 0x20010000), (0x28000000, 0x2A000000))
 BULK_CHUNK = 496                # an editor request is 512 bytes at most (longer ones are cut): 9 bytes of map + str16 header
 LIVE =os.path.join(os.path.dirname(os.path.abspath(__file__)), "live.json")
 
@@ -63,6 +64,9 @@ class Poke:
             ed.seq = keep
 
     def at(self, addr):
+        # RAM only: local SRAM, AHB SRAM, SDRAM. Never the peripherals or the system space (clocks, power, thermal:
+        # the hardware must not be reconfigured or overheated by an experiment)
+        assert any(lo <= addr < hi for lo, hi in RAM), f"{addr:#x} is not RAM: refused"
         for sh in (28, 14, 0):
             self._send(0xC000 | (addr >> sh) & 0x3FFF)
 

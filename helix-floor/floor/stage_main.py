@@ -26,6 +26,7 @@ import arm_guards  # noqa: E402
 import ir_title  # noqa: E402
 import screen_mirror  # noqa: E402
 import dsp_meter  # noqa: E402
+import focus_emmc  # noqa: E402
 
 E_MAIN, E_COPY, E_DB = 0, 1, 4
 TAB1_BASE_PTRS = (0x28134D70, 0x28134DBC, 0x28134DD4, 0x28134EC8, 0x28134F80)
@@ -279,6 +280,16 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
         dcode, dsyms = dsp_meter.load()
         meter = (put(dcode), dcode, dsyms)
     assert CAVE + len(cave) <= CAVE_END, f"cave {len(cave)} bytes, room {CAVE_END - CAVE}"
+    fe = None
+    if focus_emmc.ENABLED:                             # NAM_EMMC_ART=1: Focus View's pictures from the eMMC store
+        assert meter, "NAM_EMMC_ART needs NAM_DSP_METER"
+        off, jb = focus_emmc.meter_patch(meter[0], meter[1])
+        k = meter[0] - CAVE + off
+        cave[k:k + len(jb)] = jb
+        dpatched = bytearray(meter[1])
+        dpatched[off:off + len(jb)] = jb
+        meter = (meter[0], bytes(dpatched), meter[2])   # verify() reads the module back with the jump in
+        fe = (focus_emmc.load(), meter[0] + off, jb)
     # pointers and counts (all in seg2: the file offsets don't move with seg0's growth... they do,
     # so everything is written before the cave is spliced in)
     for p in TAB1_BASE_PTRS:
@@ -315,6 +326,10 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
     for h, p, l, d, n in segs[1:]:
         struct.pack_into('<3I', out, h + delta, l, d, n + delta)
     struct.pack_into('<I', out, 4, len(out))
+    if fe:
+        out = bytearray(focus_emmc.append_to_seg1(bytes(out), segments, fe[0]))
+        log.append(f"Focus View from the eMMC store: {len(fe[0])} B at {focus_emmc.VA:#x} (after segment 1); "
+                   f"focus_img {fe[1]:#x} -> ldr.w pc, [pc] ; .word {focus_emmc.VA | 1:#x}")
     out = l6ia.fix_internal_crcs(bytes(out))
     log.append(f"seg0 {l0:#x} -> {l0 + delta:#x} bytes (cave {CAVE:#x}..{CAVE + delta:#x}, "
                f"{CAVE_END - CAVE - delta} bytes left); Entry 0 {len(e0):#x} -> {len(out):#x}")
@@ -322,7 +337,7 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
     log.append(f"IR-name title: caves {ca:#x} / {cb:#x} ({len(tcode)} B); sites {ir_title.SITE_A:#x}, "
                f"{ir_title.SITE_B:#x} (via relay {ir_title.RELAY:#x}) for preset id {pid}")
     log.append(f"tables at Table 1 {a1:#x}, Table 2 {a2:#x}, lists " + ", ".join(f"({i // 4},{i % 4}) {v:#x}" for i, _, v in la))
-    return out, pid, log, (a1, a2, la, ca, cb, tcode, mirror, meter)
+    return out, pid, log, (a1, a2, la, ca, cb, tcode, mirror, meter, fe)
 
 
 def verify(e0, src_ni, new_ni, addrs, xeno_ni=None):
@@ -330,7 +345,9 @@ def verify(e0, src_ni, new_ni, addrs, xeno_ni=None):
     code in the cave run through the guard tests' interpreter."""
     n_t1 = 823 if E555 else 824
     im = Image(e0)
-    a1, a2, la, ca, cb, tcode, mirror, meter = addrs
+    a1, a2, la, ca, cb, tcode, mirror, meter, fe = addrs
+    if fe:
+        assert im.rd(focus_emmc.VA, len(fe[0])) == fe[0] and im.rd(fe[1], len(fe[2])) == fe[2], "Focus View eMMC reader"
     for va, b in ir_title.site_patches(ca, cb).items():
         assert im.rd(va, len(b)) == b
     assert im.rd(ca, len(tcode)) == tcode
