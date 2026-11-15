@@ -189,8 +189,12 @@ assert px(fb, 188 - 24, 126) == (3, 0, 0)                                       
 assert px(fb, 103 - 24, 270) == (14, 2, 1)                                              # grey 8 (a dimmer outline): half
 assert px(fb, 700 - 24, 400) == (28, 4, 2)                                              # selected (white): the same colour as any enabled frame
 # the second border: white outside the selected frame only, the others wiped, the line's stubs kept
-assert all(px(fb, 700 - 26 + k, 400 - 26) == (31, 31, 31) for k in range(52))            # its top row (row -2)
-assert all(px(fb, 700 - 26, 400 - 26 + k) == (31, 31, 31) for k in range(52)) and px(fb, 700 + 25, 400) == (31, 31, 31)
+W = (31, 31, 31)
+assert all(px(fb, 700 - 26 + k, 400 - 26) == W for k in range(5, 47)) and px(fb, 700 - 26 + 4, 400 - 26) == (0, 0, 0)   # its top row, rounded
+assert px(fb, 700 - 26, 400 - 26) == (0, 0, 0) and px(fb, 700 + 25, 400 - 26) == (0, 0, 0)      # the square corner is not drawn
+assert px(fb, 700 - 26, 400 - 26 + 5) == W and px(fb, 700 - 26, 400 - 26 + 8) == W              # the left edge from its curve down
+assert all(px(fb, 700 - 26, 400 - 26 + k) == W for k in range(8, 44)) and px(fb, 700 + 25, 400) == W
+assert px(fb, 700 - 26 + 1, 400 - 26 + 2) == (0, 0, 0) and px(fb, 700 - 26 + 2, 400 - 26 + 2) == W                                          # inside the curve, before the border starts
 assert px(fb, 103 - 26, 126 - 26) == (0, 0, 0) and px(fb, 103 + 25, 126 + 25) == (0, 0, 0)
 assert px(fb, 103 - 26, 126) == (16, 16, 16) and px(fb, 103 - 25, 126) == (16, 16, 16) and px(fb, 103 + 24 + 1, 126) == (16, 16, 16)   # wiped, the stub's grey (0x4210) back
 assert px(fb, 103 - 20, 126) == (0, 0, 0)                                               # outside the outline band: nothing
@@ -202,13 +206,13 @@ drawn(fb, 188, 126, 0x20, dim=(1, 0x3DEF))
 fb2 = run()
 assert fb2 == fb and st["reads"] == []
 # the tuning words: a selected (white) frame goes toward the category colour with sel_mix, the dimming follows dim_shift / dim_mask
-mu.mem_write(BASE + 0x414, struct.pack("<2I", 2, 0x1CE7))           # the "not selected, bypassed" pair: three quarters
+mu.mem_write(BASE + 0x514, struct.pack("<2I", 2, 0x1CE7))           # the "not selected, bypassed" pair: three quarters
 fb4 = run()
 want = struct.unpack("<H", bytes([0x20, 0x41]))[0]
 src = struct.unpack("<H", bytes([0x20, 0x40]))[0]
 got = struct.unpack("<H", fb4[((126 - S // 2) * 800 + 188 - S // 2) * 2:][:2])[0]
 assert got == src - ((src >> 2) & 0x1CE7), (hex(got), hex(src))
-mu.mem_write(BASE + 0x414, struct.pack("<2I", 1, 0x3DEF))
+mu.mem_write(BASE + 0x514, struct.pack("<2I", 1, 0x3DEF))
 # a square larger than the picture is blanked first (the stock icon under it): stock pixels in the 8 x 8 are gone
 mu.mem_write(FB, b"\xff" * (800 * 480 * 2))
 mu.reg_write(UC_ARM_REG_R0, VIEW); mu.reg_write(UC_ARM_REG_R1, FB)

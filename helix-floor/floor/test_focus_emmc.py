@@ -69,7 +69,7 @@ def machine(with_store=True):
         mu.reg_write(UC_ARM_REG_R4, FB)
         mu.reg_write(UC_ARM_REG_SP, 0x20008000)
         mu.reg_write(UC_ARM_REG_LR, 0x20000101)
-        mu.emu_start((BASE + 0x440) | 1, 0x20000100)
+        mu.emu_start((BASE + 0x540) | 1, 0x20000100)
         assert mu.reg_read(UC_ARM_REG_R4) == FB
         return bytes(mu.mem_read(FB, 800 * 480 * 2))
     return run, st

@@ -19,7 +19,7 @@ VA = SEG1[0] + SEG1[1]
 FOCUS_IMG = bytes.fromhex("e0b58ab0")       # focus_img's first two instructions: push {r5-r7, lr}; sub sp, #0x28
 SITE = bytes.fromhex("9b780bb1")            # ldrb r3, [r3, #2]; cbz r3, +6: Focus View's test at the end of dm_paint
 END = 0x10092000
-HOOK, IMG, LIT = 0x000, 0x440, 0x400        # fe_hook, fe_img and the literals in the module (m4/focus_emmc.s .org's)
+HOOK, IMG, LIT = 0x000, 0x540, 0x500        # fe_hook, fe_img and the literals in the module (m4/focus_emmc.s .org's)
 
 
 def load():

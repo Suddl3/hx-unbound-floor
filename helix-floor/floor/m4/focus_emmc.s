@@ -383,17 +383,16 @@ fr_skip:
     bne fr_run
     bx lr
 
-@ fh_outer: a 2 pixel border round the 48 x 48 frame (r0 its first pixel): white when r1 = 1, else wiped (the stock paint does not clean
-@ outside a block's own image). The path line enters the frame at its middle rows (22..25): there a wipe puts back the line's
-@ own pixel (the one just outside the border) instead of black.
+@ fh_outer: the selected frame's second border (r0 the frame's first pixel, r1 = 1 selected): a 2 pixel white border just outside the
+@ 48 x 48 frame, rounded to follow its corners (outer radius 8 on the 52 x 52 box; the tables fo_tab give, for the top 8 rows,
+@ the first column of the border and the first column of the frame's own corner; the bottom 8 rows mirror them). Every call
+@ first wipes the whole square ring (the stock paint does not clean outside a block's own image): black, except at the path
+@ line's middle rows (22..25), where the line's own pixel (the one just outside the ring) is put back.
 fh_outer:
-    push {r4-r7, lr}
+    push {r4-r9, lr}
     mov r3, r1
-    cmp r3, #0
-    ite ne
-    movwne r4, #0x7fff
-    moveq r4, #0
-    subw r5, r0, #3204             @ row -2, column -2
+    movs r4, #0
+    subw r5, r0, #3204              @ row -2, column -2
     movs r6, #0
 fo_row:
     cmp r6, #2
@@ -403,8 +402,6 @@ fo_row:
     subs r7, r6, #24                @ frame row 22 is row index 24
     cmp r7, #4
     bhs fo_side
-    cmp r3, #0
-    bne fo_side                     @ selected: white all the way
     ldrh r2, [r5, #-2]
     strh r2, [r5]
     strh r2, [r5, #2]
@@ -430,11 +427,84 @@ fo_next:
     adds r6, #1
     cmp r6, #52
     bne fo_row
-    pop {r4-r7, pc}
+    cmp r3, #0
+    beq fo_done
+    movw r4, #0x7fff                @ white
+    movw r1, #(52 * 1600) & 0xffff
+    movt r1, #(52 * 1600) >> 16
+    subs r5, r5, r1                 @ back to row -2
+    adr.w r8, fo_tab
+    movw r12, #1600
+    movs r6, #0
+fo_dr:
+    cmp r6, #8
+    bhs fo_mid
+    ldrb r7, [r8, r6]               @ the border's first column in this row
+    adds r1, r8, #8
+    ldrb r9, [r1, r6]               @ the frame's first column in this row (255: none yet)
+    mul r1, r6, r12
+    add r1, r5                      @ this row (top)
+    rsb r2, r6, #51
+    mul r2, r2, r12
+    add r2, r5                      @ the mirrored row (bottom)
+    cmp r6, #2
+    bhs fo_cor
+    lsls r7, r7, #1
+    rsb r9, r7, #52                 @ the whole span between the two ends
+    add r0, r1, r7
+    mov r3, r9
+    bl fo_fill
+    add r0, r2, r7
+    mov r3, r9
+    bl fo_fill
+    b fo_dnext
+fo_cor:
+    subs r9, r9, r7                 @ the width of each end piece
+    lsls r7, r7, #1
+    add r0, r1, r7
+    mov r3, r9
+    bl fo_fill
+    add r0, r2, r7
+    mov r3, r9
+    bl fo_fill
+    rsb r7, r7, #104
+    sub.w r7, r7, r9, lsl #1        @ the right piece's first byte
+    add r0, r1, r7
+    mov r3, r9
+    bl fo_fill
+    add r0, r2, r7
+    mov r3, r9
+    bl fo_fill
+fo_dnext:
+    adds r6, #1
+    b fo_dr
+fo_mid:
+    movs r6, #8
+fo_mr:
+    mul r1, r6, r12
+    add r1, r5
+    strh r4, [r1]
+    strh r4, [r1, #2]
+    strh r4, [r1, #100]
+    strh r4, [r1, #102]
+    adds r6, #1
+    cmp r6, #44
+    bne fo_mr
+fo_done:
+    pop {r4-r9, pc}
+fo_fill:                            @ r0 pixel, r3 count
+    strh r4, [r0], #2
+    subs r3, #1
+    bne fo_fill
+    bx lr
+.balign 4
+fo_tab:
+    .byte 5, 3, 2, 1, 1, 0, 0, 0
+    .byte 255, 255, 6, 4, 3, 3, 2, 2
 
 .equ MEMSET_, 0
 .ltorg
-.org 0x400
+.org 0x500
 dm_cfg_p:
     .word 0                         @ the meter's dm_cfg (the build / the host fills it)
     .word 0                         @ the meter's focus_fill, Thumb bit set
@@ -443,7 +513,7 @@ dm_cfg_p:
     .word 1, 0x3def                 @ bypassed, not selected: half
     .word 0, 0                      @ on, selected: full
     .word 1, 0x3def                 @ bypassed, selected: half
-.org 0x440
+.org 0x540
 .thumb_func
 fe_img:                             @ r4 the frame
     push {r4-r10, lr}
