@@ -108,8 +108,8 @@ def machine(store=True):
                 for x in range(48):
                     if x < 2 or x >= 46 or y < 2 or y >= 46:
                         mu.mem_write(FB + ((cy - 24 + y) * 800 + cx - 24 + x) * 2, struct.pack("<H", grey << 10 | grey << 5 | grey))
-            for y in range(22, 26):                       # the path line's stubs just outside the frame (columns -3 and 50)
-                for x in (-3, 50):
+            for y in range(22, 26):                       # the path line's stubs just outside the ring (columns -4 and 51)
+                for x in (-4, 51):
                     mu.mem_write(FB + ((cy - 24 + y) * 800 + cx - 24 + x) * 2, struct.pack("<H", 0x4210))
         mu.reg_write(UC_ARM_REG_R0, VIEW)
         mu.reg_write(UC_ARM_REG_R1, FB)
@@ -188,15 +188,18 @@ assert px(fb, 103 + 23, 126 + 23) == (28, 4, 2) and px(fb, 103 - 22, 126 + 22) =
 assert px(fb, 188 - 24, 126) == (3, 0, 0)                                               # a bypassed frame (image 40): 6/32 of its colour
 assert px(fb, 103 - 24, 270) == (14, 2, 1)                                              # grey 8 (a dimmer outline): half
 assert px(fb, 700 - 24, 400) == (28, 4, 2)                                              # selected (white): the same colour as any enabled frame
-# the second border: white outside the selected frame only, the others wiped, the line's stubs kept
+# the second border: 2 px white one pixel outside the selected frame (a black gap), rounded; the others wiped, the line's stubs kept
 W = (31, 31, 31)
-assert all(px(fb, 700 - 26 + k, 400 - 26) == W for k in range(5, 47)) and px(fb, 700 - 26 + 4, 400 - 26) == (0, 0, 0)   # its top row, rounded
-assert px(fb, 700 - 26, 400 - 26) == (0, 0, 0) and px(fb, 700 + 25, 400 - 26) == (0, 0, 0)      # the square corner is not drawn
-assert px(fb, 700 - 26, 400 - 26 + 5) == W and px(fb, 700 - 26, 400 - 26 + 8) == W              # the left edge from its curve down
-assert all(px(fb, 700 - 26, 400 - 26 + k) == W for k in range(8, 44)) and px(fb, 700 + 25, 400) == W
-assert px(fb, 700 - 26 + 1, 400 - 26 + 2) == (0, 0, 0) and px(fb, 700 - 26 + 2, 400 - 26 + 2) == W                                          # inside the curve, before the border starts
-assert px(fb, 103 - 26, 126 - 26) == (0, 0, 0) and px(fb, 103 + 25, 126 + 25) == (0, 0, 0)
-assert px(fb, 103 - 26, 126) == (16, 16, 16) and px(fb, 103 - 25, 126) == (16, 16, 16) and px(fb, 103 + 24 + 1, 126) == (16, 16, 16)   # wiped, the stub's grey (0x4210) back
+X0, Y0 = 700 - 27, 400 - 27                                                  # the 54 x 54 box's corner
+assert all(px(fb, X0 + k, Y0) == W for k in range(6, 48)) and px(fb, X0 + 5, Y0) == (0, 0, 0)    # its top row, rounded
+assert px(fb, X0, Y0) == (0, 0, 0) and px(fb, X0 + 53, Y0) == (0, 0, 0)    # the square corner is not drawn
+assert px(fb, X0 + 4, Y0 + 1) == W and px(fb, X0 + 3, Y0 + 1) == (0, 0, 0)  # the second row starts earlier
+assert all(px(fb, X0, Y0 + k) == W and px(fb, X0 + 1, Y0 + k) == W for k in range(9, 45))     # the left edge: two columns
+assert all(px(fb, X0 + 2, Y0 + k) == ((16, 16, 16) if 25 <= k <= 28 else (0, 0, 0)) for k in range(9, 45))   # the gap between the borders (the line crosses it)
+assert px(fb, X0 + 52, Y0 + 20) == W and px(fb, X0 + 53, Y0 + 20) == W and px(fb, X0 + 52, Y0 + 27) == W
+assert px(fb, X0 + 2, Y0 + 2) == (0, 0, 0) and px(fb, X0 + 3, Y0 + 2) == W   # row 2 starts at column 3 and goes on to the frame's curve
+assert px(fb, 103 - 27, 126 - 27) == (0, 0, 0) and px(fb, 103 + 26, 126 + 26) == (0, 0, 0)
+assert all(px(fb, 103 + dx, 126) == (16, 16, 16) for dx in (-27, -26, -25, 24, 25, 26))     # wiped, the stub's grey (0x4210) back
 assert px(fb, 103 - 20, 126) == (0, 0, 0)                                               # outside the outline band: nothing
 assert px(fb, 103 - 3, 126 - 3) != (28, 4, 2)                                           # the blanked square / picture inside
 # enabled blocks' pictures are at full brightness (selected or not), bypassed ones at half
