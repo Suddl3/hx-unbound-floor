@@ -137,9 +137,9 @@ asked = sorted(set(st["asked"]))
 assert asked == [1, 2, 11, 21, 38], asked                         # 10 (2 path + slot / 8) + slot % 8 + 1
 
 
-def drawn(fb, cx, cy, tag, dim=(2, 0x1CE7)):
+def drawn(fb, cx, cy, tag, dim=(0, 0)):
     """The picture (rows tagged) at its centre, dimmed as v - ((v >> shift) & mask): the default is a block that is on and not
-    selected (three quarters), (0, 0) full, (1, 0x3DEF) half."""
+    selected (full), (1, 0x3DEF) half (a bypassed block)."""
     shift, mask = dim
     for r in range(S):
         row = fb[((cy - S // 2 + r) * 800 + cx - S // 2) * 2:][:2 * S]
@@ -187,8 +187,8 @@ assert px(fb, 103 - 24, 270) == (2, 0, 0)                                       
 assert px(fb, 700 - 24, 400) == (26, 4, 2)                                              # white (selected): 94% of the colour, not white
 assert px(fb, 103 - 20, 126) == (0, 0, 0)                                               # outside the outline band: nothing
 assert px(fb, 103 - 3, 126 - 3) != (7, 1, 1)                                           # the blanked square / picture inside
-# the selected block (stock outline white, 31) draws its picture at full brightness, the others dimmed
-drawn(fb, 700, 400, 0x10, dim=(0, 0))
+# enabled blocks' pictures are at full brightness (selected or not), bypassed ones at half
+drawn(fb, 700, 400, 0x10)
 drawn(fb, 103, 126, 0x30)
 drawn(fb, 188, 126, 0x20, dim=(1, 0x3DEF))
 fb2 = run()

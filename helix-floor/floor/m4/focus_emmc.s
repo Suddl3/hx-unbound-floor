@@ -379,10 +379,10 @@ dm_cfg_p:
     .word 0                         @ the meter's dm_cfg (the build / the host fills it)
     .word 0                         @ the meter's focus_fill, Thumb bit set
     .word 0                         @ fi_state
-    .word 2, 0x1ce7                 @ dim (shift, mask) of the art, by state (poked live to tune): not selected, on: three quarters
-    .word 1, 0x3def                 @ not selected, bypassed: half
-    .word 0, 0                      @ selected, on: full
-    .word 2, 0x1ce7                 @ selected, bypassed: three quarters
+    .word 0, 0                      @ dim (shift, mask) of the art, by state (poked live to tune): on, not selected: full
+    .word 1, 0x3def                 @ bypassed, not selected: half
+    .word 0, 0                      @ on, selected: full
+    .word 1, 0x3def                 @ bypassed, selected: half
 .org 0x440
 .thumb_func
 fe_img:                             @ r4 the frame
