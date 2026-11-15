@@ -137,12 +137,14 @@ asked = sorted(set(st["asked"]))
 assert asked == [1, 2, 11, 21, 38], asked                         # 10 (2 path + slot / 8) + slot % 8 + 1
 
 
-def drawn(fb, cx, cy, tag, dim=False):
+def drawn(fb, cx, cy, tag, dim=(2, 0x1CE7)):
+    """The picture (rows tagged) at its centre, dimmed as v - ((v >> shift) & mask): the default is a block that is on and not
+    selected (three quarters), (0, 0) full, (1, 0x3DEF) half."""
+    shift, mask = dim
     for r in range(S):
         row = fb[((cy - S // 2 + r) * 800 + cx - S // 2) * 2:][:2 * S]
         want = bytes([tag, 0x40 + r]) * S
-        if dim:
-            want = b"".join(struct.pack("<H", struct.unpack("<H", want[i:i + 2])[0] - ((struct.unpack("<H", want[i:i + 2])[0] >> 1) & 0x3DEF)) for i in range(0, len(want), 2))
+        want = b"".join(struct.pack("<H", struct.unpack("<H", want[i:i + 2])[0] - ((struct.unpack("<H", want[i:i + 2])[0] >> shift) & mask)) for i in range(0, len(want), 2))
         assert row == want, (cx, cy, r, row.hex(), want.hex())
 
 
@@ -151,7 +153,7 @@ def blank(fb, cx, cy):
 
 
 drawn(fb, 103, 126, 0x30)                  # picture 2
-drawn(fb, 188, 126, 0x20, dim=True)        # picture 1, halved
+drawn(fb, 188, 126, 0x20, dim=(1, 0x3DEF))        # picture 1, halved
 drawn(fb, 103, 270, 0x10)                  # picture 0
 drawn(fb, 700, 400, 0x10)
 for cx, cy in ((273, 126), (358, 126), (103 + 0, 126 + 0)):
@@ -165,7 +167,7 @@ st["frames"] = []
 fb = run()
 assert sorted(st["params"]) == [1, 2, 11, 21]
 drawn(fb, 103, 126, 0x40)                  # slot 1 -> picture 3
-drawn(fb, 188, 126, 0x20, dim=True)        # slot 5 -> picture 1 (a bypassed frame)
+drawn(fb, 188, 126, 0x20, dim=(1, 0x3DEF))        # slot 5 -> picture 1 (a bypassed frame)
 assert not any(fb[((270 - 3) * 800 + 103 - 3) * 2:][:6])           # slot 77: no picture
 assert not any(fb[((126 - 3) * 800 + 103 - 3) * 2 + 0:][:0]) or True
 st["ids"] = {1: 3, 2: 9, 11: 7, 21: 99, 38: 7}
@@ -185,16 +187,20 @@ assert px(fb, 103 - 24, 270) == (2, 0, 0)                                       
 assert px(fb, 700 - 24, 400) == (26, 4, 2)                                              # white (selected): 94% of the colour, not white
 assert px(fb, 103 - 20, 126) == (0, 0, 0)                                               # outside the outline band: nothing
 assert px(fb, 103 - 3, 126 - 3) != (7, 1, 1)                                           # the blanked square / picture inside
+# the selected block (stock outline white, 31) draws its picture at full brightness, the others dimmed
+drawn(fb, 700, 400, 0x10, dim=(0, 0))
+drawn(fb, 103, 126, 0x30)
+drawn(fb, 188, 126, 0x20, dim=(1, 0x3DEF))
 fb2 = run()
 assert fb2 == fb and st["reads"] == []
 # the tuning words: a selected (white) frame goes toward the category colour with sel_mix, the dimming follows dim_shift / dim_mask
-mu.mem_write(BASE + 0x40C, struct.pack("<2I", 2, 0x1CE7))           # dim_shift 2, dim_mask 0x1ce7: three quarters
+mu.mem_write(BASE + 0x414, struct.pack("<2I", 2, 0x1CE7))           # the "not selected, bypassed" pair: three quarters
 fb4 = run()
 want = struct.unpack("<H", bytes([0x20, 0x41]))[0]
 src = struct.unpack("<H", bytes([0x20, 0x40]))[0]
 got = struct.unpack("<H", fb4[((126 - S // 2) * 800 + 188 - S // 2) * 2:][:2])[0]
 assert got == src - ((src >> 2) & 0x1CE7), (hex(got), hex(src))
-mu.mem_write(BASE + 0x40C, struct.pack("<2I", 1, 0x3DEF))                             # a second paint: the same, no reads
+mu.mem_write(BASE + 0x414, struct.pack("<2I", 1, 0x3DEF))
 # a square larger than the picture is blanked first (the stock icon under it): stock pixels in the 8 x 8 are gone
 mu.mem_write(FB, b"\xff" * (800 * 480 * 2))
 mu.reg_write(UC_ARM_REG_R0, VIEW); mu.reg_write(UC_ARM_REG_R1, FB)

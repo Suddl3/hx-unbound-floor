@@ -218,13 +218,20 @@ fh_pic:
     mla r2, r2, r12, r1
     add.w r12, r4, r2, lsl #1       @ its first pixel
     str r12, [sp, #0x38]
-    ldr r1, [sp, #0x3c]
-    cbz r1, fh_noring               @ no category colour: the frame stays as it is
     lsrs r2, r9, #1
     rsb r2, r2, #23                 @ the frame (48 square) starts this many pixels before the blanked square
     movw r0, #1602
     mul r2, r2, r0
-    sub.w r0, r12, r2
+    sub.w r0, r12, r2               @ the frame's first pixel
+    ldrh r1, [r0, #48]              @ the top edge's middle: the stock outline, a grey of 31 (white) on the selected frame
+    and r1, r1, #31
+    cmp r1, #24
+    ite hs
+    movhs r1, #1
+    movlo r1, #0
+    str r1, [sp, #0x40]             @ 1: the selected block
+    ldr r1, [sp, #0x3c]
+    cbz r1, fh_noring               @ no category colour: the frame stays as it is
     bl fh_ring                      @ the frame's outline in the category colour
 fh_noring:
     ldr r0, [sp, #0x38]
@@ -242,12 +249,13 @@ fh_er_px:
     bne fh_er_row
     ldr r0, [sp, #0x38]
     addw r0, r0, #1602             @ one row and one pixel in: the picture's first pixel
+    ldr r1, [sp, #0x40]
+    lsls r1, r1, #1
+    orr r1, r1, r11                 @ selected * 2 + bypassed
     adr.w r8, dm_cfg_p
-    ldr lr, [r8, #0x10]             @ dim_mask
-    ldr r8, [r8, #0xc]              @ dim_shift
-    cmp r11, #0
-    it eq
-    moveq lr, #0                    @ not a bypassed frame: nothing taken off
+    add.w r8, r8, r1, lsl #3
+    ldr lr, [r8, #0x10]             @ the state's dim_mask
+    ldr r8, [r8, #0xc]              @ and dim_shift
     mov r2, r9
 fh_ar_row:
     mov r12, r0
@@ -256,7 +264,7 @@ fh_ar_px:
     ldrh r1, [r10], #2
     lsrs r11, r1, r8
     ands r11, r11, lr
-    subs r1, r1, r11                @ bypassed: v - ((v >> dim_shift) & dim_mask) (shift 1, mask 0x3def: half)
+    subs r1, r1, r11                @ v - ((v >> dim_shift) & dim_mask): shift 1 mask 0x3def = half, shift 2 mask 0x1ce7 = three quarters, mask 0 = full
     strh r1, [r12], #2
     subs r3, #1
     bne fh_ar_px
@@ -371,8 +379,10 @@ dm_cfg_p:
     .word 0                         @ the meter's dm_cfg (the build / the host fills it)
     .word 0                         @ the meter's focus_fill, Thumb bit set
     .word 0                         @ fi_state
-    .word 1                         @ dim_shift  (bypassed art: v - ((v >> dim_shift) & dim_mask); poked live to tune)
-    .word 0x3def                    @ dim_mask
+    .word 2, 0x1ce7                 @ dim (shift, mask) of the art, by state (poked live to tune): not selected, on: three quarters
+    .word 1, 0x3def                 @ not selected, bypassed: half
+    .word 0, 0                      @ selected, on: full
+    .word 2, 0x1ce7                 @ selected, bypassed: three quarters
 .org 0x440
 .thumb_func
 fe_img:                             @ r4 the frame
