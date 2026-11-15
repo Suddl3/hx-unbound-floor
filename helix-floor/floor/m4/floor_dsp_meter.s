@@ -228,7 +228,7 @@ dm_summed:
     bne dm_sum
     adr.w r0, dm_cfg
     ldrb r0, [r0, #1]
-    cmp r0, #2
+    cmp r0, #1                      @ 1 = Meters (the stock default of the setting), 2 = Numbers
     bne dm_numbers
     cmp r11, #0xff                  @ meters: "Pn" and a bar, the slot's whole width (the bar stops at 75)
     it hi
@@ -716,7 +716,7 @@ dm_seq:                             @ key, value: gear menu press and release, H
 dt_onoff:
     .ascii "Off\0\0\0\0\0On\0\0\0\0\0\0"
 dt_modes:
-    .ascii "Off\0\0\0\0\0Numbers\0Meters\0\0"
+    .ascii "Off\0\0\0\0\0Meters\0\0Numbers\0"
 .balign 2
 dm_font:                            @ 3x5 glyphs, bit 14 the top left cell, rows of 3 bits: 0..9, '/', 'P', ' '
     .hword 0b111101101101111, 0b010110010010111, 0b111001111100111, 0b111001111001111, 0b101101111001001

@@ -36,7 +36,7 @@ for a in STUB.values():
     mu.mem_write(a, b"\x70\x47")
 log = []
 stock_line = None
-settings = {74: 1, 122: 1}              # Preferences: DSP Meter Blocks (0/1), Paths (0 off, 1 numbers, 2 meters)
+settings = {74: 1, 122: 1}              # Preferences: DSP Meter Blocks (0/1), Paths (0 off, 1 meters (the default), 2 numbers)
 
 
 def r(reg):
@@ -192,7 +192,7 @@ def cfg(blocks, paths):
     settings[74], settings[122] = blocks, paths
 
 
-cfg(1, 1)
+cfg(1, 2)
 call(FB0)
 px = frame(FB0)
 want0 = ["8", "12", "33", "0", "0", "10", "40", "23"]
@@ -222,7 +222,7 @@ assert frame(FB1) == px, "FB1 changed by FB0's paint"
 print("FB0 after a block went: its label wiped, the rest and FB1 unchanged")
 
 # meters: "Pn" and a 50 x 10 bar filled to used/75 (P1's 93 stops at 75: red, full; P2's 62: yellow, 39 of 48)
-cfg(1, 2)
+cfg(1, 1)
 call(FB0)
 px3 = frame(FB0)
 EDGE, RED, YELLOW, GREEN = 0x4210, 0x7c00, 0x7f00, 0x0300
@@ -241,7 +241,7 @@ print("meters: P1 full red, P2 yellow 39/48, numbers wiped")
 pxm = px3
 
 # block labels off: wiped; the meters stay
-cfg(0, 2)
+cfg(0, 1)
 call(FB0)
 px4 = frame(FB0)
 for k in (0, 1, 3, 4, 5, 6, 7):
@@ -254,13 +254,13 @@ call(FB0)
 left = [(i % W, i // W) for i, v in enumerate(frame(FB0)) if v and i // W != 160]   # (row 160: the mock stock line)
 assert not left, ("labels left with both settings off", left[:5])
 print("block labels off, then totals off: wiped")
-cfg(1, 2)
+cfg(1, 1)
 
 # a failed settings read keeps the last values; out-of-range values clamp (a stored 5 on Paths reads as meters)
 call(FB0)
 settings[74] = settings[122] = None
 call(FB0)
-assert bytes(mu.mem_read(CAVE + SYMS["dm_cfg"], 2)) == bytes([1, 2])
+assert bytes(mu.mem_read(CAVE + SYMS["dm_cfg"], 2)) == bytes([1, 1])
 cfg(7, 5)
 call(FB0)
 assert bytes(mu.mem_read(CAVE + SYMS["dm_cfg"], 2)) == bytes([1, 2])
@@ -289,8 +289,8 @@ def text(sid, value, size=32):
 
 
 assert [text(74, v) for v in (0, 1, 9)] == [(0, "Off"), (0, "On"), (0, "On")]
-assert [text(122, v) for v in (0, 1, 2, 3)] == [(0, "Off"), (0, "Numbers"), (0, "Meters"), (0, "Meters")]
-assert text(122, 1, size=4) == (0, "Num")
+assert [text(122, v) for v in (0, 1, 2, 3)] == [(0, "Off"), (0, "Meters"), (0, "Numbers"), (0, "Numbers")]
+assert text(122, 1, size=4) == (0, "Met")
 mu.reg_write(UC_ARM_REG_R4, 0x44444444)
 res = text(73, 0)                       # another ID: the stock function, its first 8 bytes run (7 registers, d8)
 assert res == ("stock", 0x200F0000 - 36), res

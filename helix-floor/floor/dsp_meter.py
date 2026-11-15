@@ -2,7 +2,7 @@
 
 The home view shows each block's DSP cost (whole per cent, grey) under its icon, and each path's blocks' sum against
 what blocks may use on that path's DSP as "P1 used/75" and "P2 used/75" (white) in the title bar, or as bar meters.
-Global Settings > Preferences page 2 gets "DSP Meter / Blocks" (Off/On) and "DSP Meter / Paths" (Off/Numbers/Meters).
+Global Settings > Preferences page 2 gets "DSP Meter / Blocks" (Off/On) and "DSP Meter / Paths" (Off/Meters/Numbers).
 The costs are the firmware's own declared ones (the ones it checks a preset against), not measured load.
 
 The code goes in the local-SRAM cave (stage_main). The home view's paint function pointer, a literal the boot passes
