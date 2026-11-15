@@ -36,7 +36,7 @@ for a in STUB.values():
     mu.mem_write(a, b"\x70\x47")
 log = []
 stock_line = None
-settings = {74: 1, 122: 1}              # Preferences: DSP Meter Blocks (0/1), Paths (0 off, 1 meters (the default), 2 numbers)
+settings = {74: 1, 122: 1}              # Preferences: DSP Meter Blocks (0 on, 1 off: the default), Paths (0 off, 1 meters (the default), 2 numbers)
 
 
 def r(reg):
@@ -189,7 +189,7 @@ mu.mem_write(DSP + 0x14 + 0x54 * 19, struct.pack("<i", 0x4c))   # (a handle past
 
 def cfg(blocks, paths):
     """The two Preferences settings, as GET_VALUE gives them: block labels 0/1; path totals 0 off, 1 numbers, 2 meters."""
-    settings[74], settings[122] = blocks, paths
+    settings[74], settings[122] = (0 if blocks else 1), paths      # 0 = On, 1 = Off (the stock default 1: block labels off)
 
 
 cfg(1, 2)
@@ -256,14 +256,14 @@ assert not left, ("labels left with both settings off", left[:5])
 print("block labels off, then totals off: wiped")
 cfg(1, 1)
 
-# a failed settings read keeps the last values; out-of-range values clamp (a stored 5 on Paths reads as meters)
+# a failed settings read keeps the last values; out-of-range values clamp (a stored 5 on Paths reads as numbers, a stored 7 on Blocks as off)
 call(FB0)
 settings[74] = settings[122] = None
 call(FB0)
 assert bytes(mu.mem_read(CAVE + SYMS["dm_cfg"], 2)) == bytes([1, 1])
-cfg(7, 5)
+settings[74], settings[122] = 7, 5
 call(FB0)
-assert bytes(mu.mem_read(CAVE + SYMS["dm_cfg"], 2)) == bytes([1, 2])
+assert bytes(mu.mem_read(CAVE + SYMS["dm_cfg"], 2)) == bytes([0, 2])
 print("settings: a failed read keeps the last, out of range clamps")
 
 
@@ -288,7 +288,7 @@ def text(sid, value, size=32):
     return r(UC_ARM_REG_R0), b[:b.index(b"\0")].decode()
 
 
-assert [text(74, v) for v in (0, 1, 9)] == [(0, "Off"), (0, "On"), (0, "On")]
+assert [text(74, v) for v in (0, 1, 9)] == [(0, "On"), (0, "Off"), (0, "Off")]
 assert [text(122, v) for v in (0, 1, 2, 3)] == [(0, "Off"), (0, "Meters"), (0, "Numbers"), (0, "Numbers")]
 assert text(122, 1, size=4) == (0, "Met")
 mu.reg_write(UC_ARM_REG_R4, 0x44444444)

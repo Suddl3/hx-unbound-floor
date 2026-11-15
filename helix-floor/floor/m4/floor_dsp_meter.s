@@ -92,9 +92,8 @@ dm_paint:                           @ r0 the frame, r1 the home view
     cmp r0, #0
     blt dm_cfg_paths
     ldr r0, [sp, #132]
-    cmp r0, #0
-    it ne
-    movne r0, #1
+    clz r0, r0
+    lsrs r0, r0, #5                 @ 1 only for a value of 0: 0 = On, 1 = Off (the setting's stock default 1 makes the labels Off)
     strb r0, [r6]
 dm_cfg_paths:
     movs r0, #ID_PATHS
@@ -714,7 +713,7 @@ dm_seq:                             @ key, value: gear menu press and release, H
     .byte 19, 1, 19, 2, 2, 1, 2, 2
 .balign 4
 dt_onoff:
-    .ascii "Off\0\0\0\0\0On\0\0\0\0\0\0"
+    .ascii "On\0\0\0\0\0\0Off\0\0\0\0\0"
 dt_modes:
     .ascii "Off\0\0\0\0\0Meters\0\0Numbers\0"
 .balign 2
