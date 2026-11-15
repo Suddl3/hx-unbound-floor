@@ -74,6 +74,10 @@ def main():
         bf.run(os.path.join(HERE, "stage_art.py"), s4, s4 + ".art", art, os.environ.get("NAM_ART_SIZE", "128"))
         os.replace(s4 + ".art", s4)
         os.replace(s4 + ".art.art.json", out + ".art.json")
+    import partition_guard                   # never write an entry past its eMMC partition (FOCUS11 overwrote user IRs)
+    bad, _ = partition_guard.check(s4)
+    if bad:
+        sys.exit("PARTITION GUARD: " + "; ".join(bad) + "\nno .hxf written")
     rep = bf.report(s0, s4)
     print(rep)
     open(os.path.join(b, "CHANGES_NAM2.txt" if os.environ.get("NAM_555_VARIANT", "hybrid") == "hybrid" else
