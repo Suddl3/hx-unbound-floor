@@ -6,6 +6,9 @@
                                    --scenes (a folder of <name>.png, 800 x 480) and --assign (bg_store.py's JSON) every
                                    picture is stored on the background of its model, and the backgrounds go to sector
                                    0x460000 (bg_store.py: the layout)
+  floor_emmc_art.py bg-live        dev mode (RAM only): run the module with backgrounds from free SDRAM (a restart undoes it)
+  floor_emmc_art.py bg-test SCENES ASSIGN   dev mode: add the background section to the EXISTING store header, backgrounds
+                                   to 0x460000 (eMMC past the partitions); bg-off removes the section
   floor_emmc_art.py erase          zeroes the store's header sectors (the pictures stay but are never read)
 
 Store at 0x400000: sector 0 = "HXPC" + 12 bytes, then the header emmc_art.s reads ({u16 S, u16 preset ids, u32 first
@@ -254,6 +257,81 @@ def icons_live():
     print("block icons live: module uploaded, focus_img -> fe_img, dm_paint -> fe_hook (a Floor restart undoes it)")
 
 
+LIVE_VA = 0x29F20000            # dev mode: the focus module runs from free SDRAM (no write over the clock-stop wrappers)
+
+
+def bg_live():
+    """Dev mode, RAM only: run the current focus module (fe_bg included) from free SDRAM at LIVE_VA. The installed module's two
+    entry points (fe_hook at +0, fe_img at +0x540, which dm_paint's call and the focus_img jump already reach) each get an
+    8 byte jump to the new one; the meter, the clock-stop wrappers and the rest of the installed module are not touched.
+    A Floor restart undoes it."""
+    import focus_emmc
+    lv = floor_poke.live()
+    meter = lv["meter"]
+    code = focus_emmc.with_literals(focus_emmc.load(), meter + json_sym("dm_cfg"), _focus_fill(meter))
+    veneer = lambda target: bytes.fromhex("dff800f0") + struct.pack("<I", target | 1)      # ldr.w pc, [pc]; .word target
+    with floor_poke.Poke() as p:
+        p.enable_bulk()
+        p.write_bulk(LIVE_VA, code)                              # not referenced yet: nothing can run it half written
+        for entry in (focus_emmc.HOOK, focus_emmc.IMG):
+            p.patch_atomic(focus_emmc.VA + entry, veneer(LIVE_VA + entry))
+    print(f"focus module (with backgrounds) running from {LIVE_VA:#x}: fe_hook and fe_img of the installed module jump to it "
+          f"(a restart undoes it)")
+
+
+def _focus_fill(meter):
+    import focus_emmc
+    mcode = open(os.path.join(FLOOR, "m4", "floor_dsp_meter.bin"), "rb").read()
+    return focus_emmc.patches(meter, mcode)[1]
+
+
+def bg_test(scenes, assign):
+    """Dev mode, eMMC past the partitions only: add a background section to the picture store's EXISTING header (the pictures
+    stay as they are, so each sits on black over the scene) and write the backgrounds at sector 0x460000. bg-off removes it."""
+    import bg_store
+    names, _ = None, None
+    with floor_poke.Poke() as p:
+        p.enable_bulk()
+        hdr = floor_emmc.read(p, STORE, HDR_SECTORS)
+        if hdr[:4] != MAGIC:
+            raise SystemExit("no picture store on the eMMC (floor_emmc_art.py write first)")
+        n = struct.unpack_from("<H", hdr, 18)[0]
+        size = struct.unpack_from("<H", hdr, 16)[0]
+        print(f"existing store: {size} x {size} pictures, {n} preset ids")
+        cats, syms = bg_store.categories()
+        names, slots = bg_store.resolve(assign, n, cats, syms)
+        bgs = [bg_store.background_bytes(bg_store.scene_rgb(os.path.join(scenes, nm + ".png"))) for nm in names]
+        data = b"".join(bgs)
+        probe = floor_emmc.read(p, bg_store.BG_STORE, 8)
+        if any(probe) and hdr[bg_store.BG_HDR:bg_store.BG_HDR + 4] != bg_store.MAGIC:
+            raise SystemExit("the background area is not blank and has no background section: refusing to write over it")
+        step = floor_emmc.MAX // bg_store.sectors_per_bg() * bg_store.sectors_per_bg() * 512
+        for off in range(0, len(data), step):
+            floor_emmc.write(p, bg_store.BG_STORE + off // 512, data[off:off + step])
+        sp = bg_store.sectors_per_bg()
+        for k in range(len(bgs)):
+            assert floor_emmc.read(p, bg_store.BG_STORE + k * sp, sp) == bgs[k], f"background {k} read back differs"
+        sec = bg_store.section(slots, len(bgs), bg_store.BG_STORE)
+        assert bg_store.BG_HDR + len(sec) <= HDR_SECTORS * 512
+        new = hdr[:bg_store.BG_HDR] + bytes(HDR_SECTORS * 512 - bg_store.BG_HDR)
+        new = new[:bg_store.BG_HDR] + sec + new[bg_store.BG_HDR + len(sec):]
+        floor_emmc.write(p, STORE, new)                         # the header last
+        assert floor_emmc.read(p, STORE, HDR_SECTORS) == new, "header read back differs"
+    print(f"{len(bgs)} backgrounds written, header section added: {dict((nm, slots.count(i)) for i, nm in enumerate(names))}")
+
+
+def bg_off():
+    """Dev mode: remove the background section from the header (the backgrounds stay, never read)."""
+    import bg_store
+    with floor_poke.Poke() as p:
+        p.enable_bulk()
+        hdr = floor_emmc.read(p, STORE, HDR_SECTORS)
+        new = hdr[:bg_store.BG_HDR] + bytes(HDR_SECTORS * 512 - bg_store.BG_HDR)
+        floor_emmc.write(p, STORE, new)
+        assert floor_emmc.read(p, STORE, HDR_SECTORS) == new
+    print("background section removed")
+
+
 def json_sym(name):
     import json
     return json.load(open(os.path.join(FLOOR, "m4", "floor_dsp_meter.json")))[name]
@@ -277,6 +355,12 @@ def main():
         write(int(rest[0]) if rest else 128, scenes, json.load(open(assign)) if assign else None)
     elif a and a[0] == "icons":
         icons_write(int(a[1]) if len(a) > 1 else ICON_SIZE)
+    elif a and a[0] == "bg-live":
+        bg_live()
+    elif a and a[0] == "bg-test" and len(a) == 3:
+        bg_test(a[1], json.load(open(a[2])))
+    elif a and a[0] == "bg-off":
+        bg_off()
     elif a and a[0] == "icons-live":
         icons_live()
     elif a and a[0] == "erase":

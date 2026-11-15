@@ -30,9 +30,10 @@ def load():
     return code + bytes(-len(code) % 4)
 
 
-def jump(at):
-    """Bytes for `at` that go to fe_img: ldr.w pc, [pc] with its word aligned (a nop first at 2 mod 4)."""
-    body = b"\xdf\xf8\x00\xf0" + struct.pack("<I", (VA + IMG) | 1)
+def jump(at, va=VA):
+    """Bytes for `at` that go to fe_img: ldr.w pc, [pc] with its word aligned (a nop first at 2 mod 4). va: where the module
+    runs (the build: after segment 1; dev mode: free SDRAM, auto/floor_emmc_art.py bg-live)."""
+    body = b"\xdf\xf8\x00\xf0" + struct.pack("<I", (va + IMG) | 1)
     return body if at % 4 == 0 else b"\x00\xbf" + body
 
 
@@ -65,16 +66,16 @@ def hook_site(meter_code):
     return k - 4
 
 
-def patches(meter_va, meter_code):
+def patches(meter_va, meter_code, va=VA):
     """({offset in the meter module: bytes}, the meter's focus_fill): the jump over focus_img to fe_img, and at the end of
     dm_paint `mov r0, r5; mov r1, r4; bl fe_hook; nop; nop` over the Focus View lines."""
     site = hook_site(meter_code)
     focus_fill = decode_bl(meter_va + site + 8, meter_code[site + 8:site + 12])
     img = meter_code.find(FOCUS_IMG)
     assert img > 0 and meter_code.find(FOCUS_IMG, img + 1) < 0, "focus_img not found once in the meter module"
-    hook = b"\x28\x46\x21\x46" + encode_bl(meter_va + site + 4, VA + HOOK) + b"\x00\xbf\x00\xbf"
+    hook = b"\x28\x46\x21\x46" + encode_bl(meter_va + site + 4, va + HOOK) + b"\x00\xbf\x00\xbf"
     assert len(hook) == 12
-    return {img: jump(meter_va + img), site: hook}, focus_fill
+    return {img: jump(meter_va + img, va), site: hook}, focus_fill
 
 
 def with_literals(code, dm_cfg, focus_fill):
