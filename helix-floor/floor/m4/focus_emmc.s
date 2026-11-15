@@ -39,11 +39,17 @@
 .equ ICON_STORE, 0x440000
 .equ TBL, 0x29A00000
 .equ MAGICI, 0x49505848             @ "HXPI"
+.equ HDR_SEC, 10                    @ header sectors; the pictures follow it in RAM
+.equ NAM_PID, 1912                  @ header: u16 the NAM block's preset id; +1920 u16 picture[128] by capture slot
+.equ NAM_TAB, 1920
+.equ COLOURS, 2304                  @ header: u16 category colour[1024] by stock frame image index
+.equ PARAM_FN, 0x2813aab9           @ (ctx, block id, query, out): the block title's parameter reader
 
 .thumb_func
 fe_hook:                            @ r0 the home view, r1 the frame
     push {r4-r11, lr}
-    sub sp, #0x44                   @ 36 + 68: external calls stay 8-byte aligned; [sp] the block descriptor (0x34 B), [sp, #0x38] a pointer
+    sub sp, #0x64                   @ 36 + 100: external calls stay 8-byte aligned; [sp] the block descriptor (0x34 B), [sp, #0x38] a pointer,
+                                    @ [0x3c] the colour, [0x44] the NAM knob query (12 B), [0x50] its answer (12 B)
     mov r4, r1
     mov r5, r0
     adr.w r12, dm_cfg_p
@@ -61,7 +67,7 @@ fh_icons:
     ldr r6, =TBL
     mov r0, r6
     ldr r1, =ICON_STORE
-    movs r2, #8
+    movs r2, #HDR_SEC
     ldr r3, =READ
     blx r3
     cmp r0, #0
@@ -74,7 +80,7 @@ fh_icons:
     ldrh r0, [r6, #14]
     mul r8, r0, r8                 @ sectors of pictures
     ldr r9, [r6, #8]                @ their first sector
-    add.w r10, r6, #0x1000
+    add.w r10, r6, #(HDR_SEC * 512)
 fh_chunk:
     cmp r8, #0
     beq fh_loaded
@@ -157,8 +163,12 @@ fh_loop:
     ldrh r1, [r6, #6]
     cmp r0, r1
     bhs fh_next
+    ldrh r1, [r6, #NAM_PID]
+    cmp r0, r1
+    beq fh_nam                      @ a NAM block: the picture of its capture
     add.w r2, r6, #144
     ldrh r10, [r2, r0, lsl #1]      @ its picture
+fh_pic:
     movw r1, #0xffff
     cmp r10, r1
     beq fh_next
@@ -168,7 +178,7 @@ fh_loop:
     and r1, r9, #7
     lsrs r0, r0, r1
     and r11, r0, #1                 @ 1: a bypassed frame
-    add.w r1, r6, #2048
+    add.w r1, r6, #COLOURS
     ldrh r1, [r1, r9, lsl #1]       @ this frame image's category colour (RGB555, 0: none)
     ubfx r0, r1, #10, #5
     lsls r0, r0, #20
@@ -185,7 +195,7 @@ fh_loop:
     lsls r1, r1, #9
     mul r1, r10, r1
     add r1, r6
-    add.w r10, r1, #0x1000          @ the picture's pixels
+    add.w r10, r1, #(HDR_SEC * 512) @ the picture's pixels
     ldrb r3, [r8, #0x1c]            @ the widget's centre, as the meter's labels find it
     movs r2, #3
     udiv r1, r3, r2
@@ -250,12 +260,39 @@ fh_ar_px:
     add.w r0, r0, #1600
     subs r2, #1
     bne fh_ar_row
+    b fh_next
+fh_nam:                             @ r10 the block id: knob 0 (the capture slot, 1..128) through the title's reader
+    mvn r1, #1
+    str r1, [sp, #0x44]
+    movs r1, #0
+    str r1, [sp, #0x48]
+    str r1, [sp, #0x4c]
+    str r1, [sp, #0x50]
+    str r1, [sp, #0x54]
+    str r1, [sp, #0x58]
+    ldr r3, =PRESET_OBJ
+    blx r3
+    mov r1, r10
+    add r2, sp, #0x44
+    add r3, sp, #0x50
+    ldr lr, =PARAM_FN
+    blx lr
+    ldrb r0, [sp, #0x54]
+    ldr r1, [sp, #0x50]
+    lsls r0, r0, #24
+    orr r0, r0, r1, lsr #8
+    subs r0, #1
+    cmp r0, #128
+    bhs fh_next
+    add.w r1, r6, #NAM_TAB
+    ldrh r10, [r1, r0, lsl #1]
+    b fh_pic
 fh_next:
     adds r7, #1
     cmp r7, #32
     bne fh_loop
 fh_out:
-    add sp, #0x44
+    add sp, #0x64
     pop {r4-r11, pc}
 
 @ fh_ring: the outline of a 48 x 48 block frame (r0 its first pixel, r1 the category colour spread as above): the 4 pixel band

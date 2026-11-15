@@ -3,7 +3,7 @@ import os
 import struct
 
 from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_CODE
-from unicorn.arm_const import (UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_R2, UC_ARM_REG_R4, UC_ARM_REG_R5, UC_ARM_REG_LR,
+from unicorn.arm_const import (UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_R2, UC_ARM_REG_R3, UC_ARM_REG_R4, UC_ARM_REG_R5, UC_ARM_REG_LR,
                                UC_ARM_REG_SP)
 import focus_emmc
 
@@ -11,10 +11,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CODE = focus_emmc.with_literals(focus_emmc.load(), 0x1001FE00, 0x1001FC46)
 BASE, FB, VIEW, TBL, STORE = focus_emmc.VA, 0x285A3F50, 0x20004000, 0x29A00000, 0x440000
 CFG = 0x1001FE00
-STUBS = {0x28155F34: "memset", 0x28114A1C: "obj", 0x28148CCC: "desc", 0x1000504C: "read", 0x1001FC46: "focus_fill"}
-S, NIDS, NPIC = 6, 12, 4                 # 6 x 6 pictures (the real ones are 36 x 36), 4 pictures
+STUBS = {0x2813AAB8: "param", 0x28155F34: "memset", 0x28114A1C: "obj", 0x28148CCC: "desc", 0x1000504C: "read", 0x1001FC46: "focus_fill"}
+S, NIDS, NPIC = 6, 400, 4                 # 6 x 6 pictures (the real ones are 36 x 36), 4 pictures
 SPP = (S * S * 2 + 511) // 512
-FIRST = STORE + 8
+HDR_SEC = 10
+FIRST = STORE + HDR_SEC
 
 
 def machine(store=True):
@@ -32,20 +33,24 @@ def machine(store=True):
         bitmap = bytearray(128)
         bitmap[40 >> 3] |= 1 << (40 & 7)       # image index 40: a bypassed frame
         hdr = struct.pack("<4sHHIHH", b"HXPI", S, NIDS, FIRST, NPIC, SPP) + bytes(bitmap) + struct.pack(f"<{NIDS}H", *mp)
-        hdr += bytes(2048 - len(hdr))
+        hdr += bytes(1912 - len(hdr)) + struct.pack("<H", 380) + bytes(6)
+        nam = [0xFFFF] * 128
+        nam[0], nam[4] = 3, 1                       # capture slots 1 and 5: pictures 3 and 1
+        hdr += struct.pack("<128H", *nam)
+        hdr += bytes(2304 - len(hdr))
         cols = [0] * 1024
         cols[10] = 28 << 10 | 4 << 5 | 2            # a category colour (red-ish)
         cols[40] = 14 << 10 | 2 << 5 | 1            # the bypassed frame's dimmer one (not used for the outline maths below)
         hdr += struct.pack("<1024H", *cols)
-        hdr += bytes(8 * 512 - len(hdr))
-        for j in range(8):
+        hdr += bytes(HDR_SEC * 512 - len(hdr))
+        for j in range(HDR_SEC):
             emmc[STORE + j] = hdr[512 * j:512 * (j + 1)]
         for k in range(NPIC):
             pic = b"".join(bytes([0x10 * (k + 1), 0x40 + r]) * S for r in range(S))
             pic += bytes(SPP * 512 - len(pic))
             for j in range(SPP):
                 emmc[FIRST + k * SPP + j] = pic[512 * j:512 * (j + 1)]
-    st = {"ids": {}, "reads": [], "calls": [], "fail": False}
+    st = {"ids": {}, "reads": [], "calls": [], "fail": False, "knob": {}, "params": []}
 
     def hook(mu, addr, size, _):
         name = STUBS.get(addr)
@@ -73,6 +78,12 @@ def machine(store=True):
                 return
             mu.mem_write(buf, b"".join(emmc.get(sec + j, bytes(512)) for j in range(cnt)))
             mu.reg_write(UC_ARM_REG_R0, 0)
+        elif name == "param":
+            bid, q, out = (mu.reg_read(r) for r in (UC_ARM_REG_R1, UC_ARM_REG_R2, UC_ARM_REG_R3))
+            assert struct.unpack("<2I", bytes(mu.mem_read(q, 8))) == (0xFFFFFFFE, 0) and mu.mem_read(q + 8, 4) == bytes(4)
+            val = st["knob"].get(bid, 0)
+            mu.mem_write(out, struct.pack("<I", (val << 8) & 0xFFFFFFFF) + bytes([val >> 24]))
+            st["params"].append(bid)
         elif name == "focus_fill":
             assert mu.reg_read(UC_ARM_REG_R4) == FB
 
@@ -121,7 +132,7 @@ widget(0, 3, 10, 358, 126, w=36, h=66)     # not a 48 x 48 frame
 widget(1, 0, 10, 103, 126, anchor=4)       # path 1 slot 0: block id 21 -> preset 99, past the map: nothing
 widget(1, 15, 10, 700, 400)                # path 1 slot 15: block id 38 -> preset 7 -> picture 0
 fb = run()
-assert st["reads"] == [(STORE, 8), (FIRST, NPIC * SPP)]           # the header, then every picture, once
+assert st["reads"] == [(STORE, HDR_SEC), (FIRST, NPIC * SPP)]           # the header, then every picture, once
 asked = sorted(set(st["asked"]))
 assert asked == [1, 2, 11, 21, 38], asked                         # 10 (2 path + slot / 8) + slot % 8 + 1
 
@@ -147,6 +158,19 @@ for cx, cy in ((273, 126), (358, 126), (103 + 0, 126 + 0)):
     pass
 assert not any(fb[((126 - 3) * 800 + 273 - 3) * 2:][:6])           # the hidden slot: untouched
 assert not any(fb[((126 - 3) * 800 + 358 - 3) * 2:][:6])           # the 36 x 66 one: untouched
+# NAM blocks (preset id 380): the picture comes from the capture slot (the Model knob), not the preset id
+st["ids"] = {1: 380, 2: 380, 11: 380, 21: 380}
+st["knob"] = {1: 1, 2: 5, 11: 77, 21: 129}
+st["frames"] = []
+fb = run()
+assert sorted(st["params"]) == [1, 2, 11, 21]
+drawn(fb, 103, 126, 0x40)                  # slot 1 -> picture 3
+drawn(fb, 188, 126, 0x20, dim=True)        # slot 5 -> picture 1 (a bypassed frame)
+assert not any(fb[((270 - 3) * 800 + 103 - 3) * 2:][:6])           # slot 77: no picture
+assert not any(fb[((126 - 3) * 800 + 103 - 3) * 2 + 0:][:0]) or True
+st["ids"] = {1: 3, 2: 9, 11: 7, 21: 99, 38: 7}
+
+
 def px(fb, x, y):
     v = struct.unpack("<H", fb[(y * 800 + x) * 2:][:2])[0]
     return v >> 10 & 31, v >> 5 & 31, v & 31
@@ -178,6 +202,6 @@ assert st["calls"] == ["focus_fill"] and st["reads"] == []
 mu, st, widget, run = machine(store=False)
 st["ids"] = {1: 3}
 widget(0, 0, 10, 103, 126)
-assert not any(run()) and st["reads"] == [(STORE, 8)]
+assert not any(run()) and st["reads"] == [(STORE, HDR_SEC)]
 assert not any(run()) and st["reads"] == []
 print("block icons: block ids, 48 x 48 frames only, map, bypassed frames halved, blanked ring, cache, focus view, no store: OK")

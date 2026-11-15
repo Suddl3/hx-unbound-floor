@@ -130,44 +130,73 @@ def stock_blocks():
     return bytes(bm), cols
 
 
+ICON_HDR = 10                   # header sectors of the icon store (m4/focus_emmc.s HDR_SEC)
+NAM_PID = 380                   # the NAM A2 Lite block's preset id on this firmware
+NAM_ICONS = os.environ.get("NAM_CAPTURE_ICONS", "")   # a clone of Suddl3/hx-edit-nam (capture_icons.py, nam_capture_icons/)
+
+
+def nam_slot_icons():
+    """{capture slot 1..128: icon id}: each capture's icon as HX Edit NAM picks it (capture_icons.pick on the capture's name;
+    the slot names are the ones HX Edit remembered from the Floor), and the folder of those pictures."""
+    import json
+    if not NAM_ICONS:
+        raise SystemExit("set NAM_CAPTURE_ICONS to your clone of Suddl3/hx-edit-nam")
+    sys.path.insert(0, NAM_ICONS)
+    import capture_icons
+    mem = os.path.join(os.environ["LOCALAPPDATA"], "HX Edit NAM", "NAM Library", "floor-memory.json")
+    slots = json.load(open(mem, encoding="utf-8")).get("slots", {})
+    return {int(k): capture_icons.pick(v.get("name", "")) for k, v in slots.items() if 1 <= int(k) <= 128},         os.path.join(NAM_ICONS, "nam_capture_icons")
+
+
 def icons_build(size=ICON_SIZE):
     import art_map
+    from PIL import Image
     from stage_art import rgb555
     m = art_map.build()
     n = len(m["symbols"])
     mp = [m["ids"].get(pid, 0xFFFF) for pid in range(n)]
     spp = (size * size * 2 + 511) // 512
-    first = ICON_STORE + HDR_SECTORS
-    bitmap, cols = stock_blocks()
-    hdr = struct.pack("<4sHHIHH", b"HXPI", size, n, first, len(m["pictures"]), spp) + bitmap
-    hdr += struct.pack(f"<{n}H", *mp)
-    assert len(hdr) <= 2048
-    hdr += bytes(2048 - len(hdr)) + struct.pack("<1024H", *cols)
-    assert len(hdr) <= HDR_SECTORS * 512
-    hdr += bytes(HDR_SECTORS * 512 - len(hdr))
+    first = ICON_STORE + ICON_HDR
     pics = []
     for pth in m["pictures"]:
-        px = rgb555(art_map.open_picture(pth), size)
-        pics.append(px + bytes(spp * 512 - len(px)))
-    return hdr, b"".join(pics), spp
+        pics.append(rgb555(art_map.open_picture(pth), size))
+    by_slot, folder = nam_slot_icons()
+    ids = sorted(set(by_slot.values()))
+    nam_table = [0xFFFF] * 128
+    for k, ident in enumerate(ids):
+        pics.append(rgb555(Image.open(os.path.join(folder, ident + ".png")), size))
+        for slot, i in by_slot.items():
+            if i == ident:
+                nam_table[slot - 1] = len(m["pictures"]) + k
+    bitmap, cols = stock_blocks()
+    hdr = struct.pack("<4sHHIHH", b"HXPI", size, n, first, len(pics), spp) + bitmap
+    hdr += struct.pack(f"<{n}H", *mp)
+    assert len(hdr) <= 1912
+    hdr += bytes(1912 - len(hdr)) + struct.pack("<H", NAM_PID) + bytes(6) + struct.pack("<128H", *nam_table)
+    hdr += bytes(2304 - len(hdr)) + struct.pack("<1024H", *cols)
+    assert len(hdr) <= ICON_HDR * 512
+    hdr += bytes(ICON_HDR * 512 - len(hdr))
+    data = b"".join(px + bytes(spp * 512 - len(px)) for px in pics)
+    print(f"{len(m['pictures'])} model pictures + {len(ids)} NAM capture icons for {len(by_slot)} capture slots")
+    return hdr, data, spp
 
 
 def icons_write(size=ICON_SIZE):
     hdr, data, spp = icons_build(size)
     total = len(data) // 512
-    print(f"icon store: {total} sectors ({len(data) / 1e6:.2f} MB) of {size} x {size} pictures at {ICON_STORE + HDR_SECTORS:#x}")
+    print(f"icon store: {total} sectors ({len(data) / 1e6:.2f} MB) of {size} x {size} pictures at {ICON_STORE + ICON_HDR:#x}")
     with floor_poke.Poke() as p:
         p.enable_bulk()
-        probe = floor_emmc.read(p, ICON_STORE, 8) + floor_emmc.read(p, ICON_STORE + total, 8)
+        probe = floor_emmc.read(p, ICON_STORE, 8) + floor_emmc.read(p, ICON_STORE + total + ICON_HDR, 8)
         if any(probe) and probe[:4] != b"HXPI":
             raise SystemExit("the icon store's sectors are not blank: refusing to write over them")
         step = floor_emmc.MAX // spp * spp * 512
         for off in range(0, len(data), step):
-            floor_emmc.write(p, ICON_STORE + HDR_SECTORS + off // 512, data[off:off + step])
+            floor_emmc.write(p, ICON_STORE + ICON_HDR + off // 512, data[off:off + step])
         floor_emmc.write(p, ICON_STORE, hdr)
-        assert floor_emmc.read(p, ICON_STORE, HDR_SECTORS) == hdr
+        assert floor_emmc.read(p, ICON_STORE, ICON_HDR) == hdr
         for k in (0, len(data) // (spp * 512) - 1):
-            assert floor_emmc.read(p, ICON_STORE + HDR_SECTORS + k * spp, spp) == data[k * spp * 512:(k + 1) * spp * 512]
+            assert floor_emmc.read(p, ICON_STORE + ICON_HDR + k * spp, spp) == data[k * spp * 512:(k + 1) * spp * 512]
     print("written and checked")
 
 
