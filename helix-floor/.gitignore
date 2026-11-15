@@ -6,3 +6,4 @@ convert/
 *.bin
 *.wav
 *.nam
+floor/auto/clk_fix_orig.json

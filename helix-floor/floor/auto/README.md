@@ -11,3 +11,4 @@ Floor on a non-NAM preset before installing any build that might hang.
 - `soak.py`, `soak_eb.py`, `stab2.py`: unattended stability soaks. `soak*.py` power-cycle a frozen Floor with `plug.py`
   (Kasa smart plug; set `FLOOR_PLUG` to its IP address; python-kasa).
 - `floor_mirror.py`: the Floor's screen on the PC (`shot`, `view`, `bench`) from a build with `NAM_SCREEN_MIRROR=1` (HX Edit closed). Ported from HXtra's screen mirror.
+- `rec_tone.py`, `clk_test.py`: tempo tests with an edit-buffer preset (never saved): one tone through a tempo-synced delay while a MIDI clock (or `TAP=1`: CC64 taps) steps the tempo, `STOP_AT=` stops the clock; the tail's pitch is printed. `trace_send.py` logs the DSP tempo sender's callers (RAM only). `clk_fix.py on|off` is the live version of `clk_stop.py` (writes `clk_fix_orig.json` beside it; a restart also undoes it).
