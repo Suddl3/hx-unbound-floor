@@ -26,7 +26,7 @@ view_cycle:
 .balign 4
 table:
     .word 0x280d735d, 0x2818c21c
-    .word 0x280cfc61, 0x2818a380
+    .word 0x280b1741, 0x28185254   @ list A's active node (the layer under the views)
     .word 0x280dfc6d, 0x2818f73c
     .word 0x280cba0d, 0x28188eb8
     .word 0x280d1391, 0x2818ad84
