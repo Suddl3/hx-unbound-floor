@@ -24,7 +24,7 @@ This repository exists to take the Floor further than NAM, the way [HXtra](https
 | A feature engine for the Floor's main program (small, self-checking patches, one module per feature), modelled on HXtra's | Not started. HXtra's tooling is on the [`integration/hxtra-tooling`](../../tree/integration/hxtra-tooling) branch to port from |
 | A metronome | Not started. HXtra has one for the HX Stomp |
 | More menu options on the NAM blocks, for amp and pedal captures | Not started, scope to be written down |
-| A maintained Floor editor, NAM library and TONE3000 workflow | [HX Edit Unbound](https://github.com/Suddl3/hx-edit-unbound) and its [setup guide](https://github.com/Suddl3/hx-edit-unbound/blob/floor-navigation/FLOOR-SETUP.md): NAM library, TONE3000 browsing, capture artwork, DSP meter and Level presets (a test build, exercised on one Floor) |
+| A maintained Floor editor, NAM library and TONE3000 workflow | [HX Edit Unbound](https://github.com/Suddl3/hx-edit-unbound) and its [setup guide](https://github.com/Suddl3/hx-edit-unbound/blob/floor-navigation/docs/FLOOR-SETUP.md): NAM library, TONE3000 browsing, capture artwork, DSP meter and Level presets (a test build, exercised on one Floor) |
 
 The plan, in order, is in [ROADMAP.md](ROADMAP.md). How to work here is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
