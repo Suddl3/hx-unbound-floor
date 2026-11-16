@@ -21,7 +21,7 @@ Started 2026-11-12; updated after the Floor/editor repository reconciliation. Un
   - `pytest -m slow`: 2 passed (about 8 minutes).
   - The `firmware` tests need a Stomp file (`HX_STOMP_HXF`) and were not run.
   - The Floor's own checks in `helix-floor/floor/` are scripts, not pytest tests. Run each with `python <script>`: `test_arm_guards.py`, `test_ir_title.py` and `test_probe.py` PASS. `test_ir_title_knob.py` PASS. It needs `pip install unicorn` and the stock Entry 0 in its byte-swapped form as its argument (`tools/hxf.py unpack`, then `tools/l6ia.py <l6ia> <dir>`, then pass `00_type2.sw4.bin`).
-- [x] Maintain the Floor firmware here and the editor in [Suddl3/hx-edit-nam, floor branch](https://github.com/Suddl3/hx-edit-nam/tree/floor). Review upstream changes before integration batches, preserve attribution, and contribute reusable fixes back. **Documented**, 2026-11-12; no automatic merge or recurring watcher is configured. The HXtra integration branch remains for research until separately verified.
+- [x] Maintain the Floor firmware here and the editor in [HX Edit Unbound](https://github.com/Suddl3/hx-edit-unbound) (formerly hx-edit-nam, floor branch). Review upstream changes before integration batches, preserve attribution, and contribute reusable fixes back. **Documented**, 2026-11-12; no automatic merge or recurring watcher is configured. The HXtra integration branch remains for research until separately verified.
 - [ ] Write down the recovery procedure both maintainers have rehearsed, and on which units.
 
 ## Phase 1: the tooling, on the Floor

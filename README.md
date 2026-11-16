@@ -6,7 +6,7 @@ Custom firmware for the **Line 6 Helix Floor (3.80.0)**, built by patching your 
 
 ## Firmware and editor
 
-**This repository owns the Floor firmware. The maintained editor companion is [Suddl3/hx-edit-nam, `floor` branch](https://github.com/Suddl3/hx-edit-nam/tree/floor).** Start with [EDITOR.md](EDITOR.md) for the compatible source preview and installation instructions. Do not assume an upstream editor ZIP or a private development candidate is our current Floor editor.
+**This repository owns the Floor firmware. The maintained editor companion is [HX Edit Unbound](https://github.com/Suddl3/hx-edit-unbound)** (formerly hx-edit-nam). Start with [EDITOR.md](EDITOR.md) for the compatible source preview and installation instructions. Do not assume an upstream editor ZIP or a private development candidate is our current Floor editor.
 
 The firmware builds on [savedadodo's Floor port](https://github.com/savedadodo/helix-floor-nam-lite/tree/helix-floor), with its history and attribution retained. The port's README is kept as [README_FLOOR_NAM.md](README_FLOOR_NAM.md). Current build, feature options, install and recovery are in [helix-floor/README.md](helix-floor/README.md).
 
@@ -24,7 +24,7 @@ This repository exists to take the Floor further than NAM, the way [HXtra](https
 | A feature engine for the Floor's main program (small, self-checking patches, one module per feature), modelled on HXtra's | Not started. HXtra's tooling is on the [`integration/hxtra-tooling`](../../tree/integration/hxtra-tooling) branch to port from |
 | A metronome | Not started. HXtra has one for the HX Stomp |
 | More menu options on the NAM blocks, for amp and pedal captures | Not started, scope to be written down |
-| A maintained Floor editor, NAM library and TONE3000 workflow | [Floor source preview and setup](https://github.com/Suddl3/hx-edit-nam/blob/floor/FLOOR-SETUP.md); newer navigation work remains under repair |
+| A maintained Floor editor, NAM library and TONE3000 workflow | [HX Edit Unbound](https://github.com/Suddl3/hx-edit-unbound) and its [setup guide](https://github.com/Suddl3/hx-edit-unbound/blob/floor-navigation/FLOOR-SETUP.md): NAM library, TONE3000 browsing, capture artwork, DSP meter and Level presets (a test build, exercised on one Floor) |
 
 The plan, in order, is in [ROADMAP.md](ROADMAP.md). How to work here is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -37,7 +37,7 @@ Each project keeps its own ownership and licence. This repository does not repla
 | [hx-stomp-nam-lite](https://github.com/nocaseguy/hx-stomp-nam-lite) | nocaseguy (Derek Bui) | The foundation: the NAM A2 Lite kernel in SHARC assembly, the SHARC assembler and simulator, the `.hxf` tools. Its README is kept as [README_UPSTREAM.md](README_UPSTREAM.md). |
 | [helix-floor-nam-lite](https://github.com/savedadodo/helix-floor-nam-lite/tree/helix-floor) | savedadodo | The Helix Floor port (`helix-floor/`, `floor-web/`). `main` here starts from its `helix-floor` branch with the full commit history. |
 | [HXtra](https://github.com/wisemandenny/hxtra) | wisemandenny | Custom firmware for the HX Stomp on the same foundation: the feature engine, the main-program patches and the research notes this project learns from. HX Stomp only: its patches do not apply to the Floor as they are. |
-| [HX Edit NAM](https://github.com/andreidevs/hx-edit-nam) | andreidevs | Editor upstream; features are reviewed and selectively brought into [our Floor editor fork](https://github.com/Suddl3/hx-edit-nam/tree/floor). Existing attribution and licence remain intact. |
+| [HX Edit NAM](https://github.com/andreidevs/hx-edit-nam) | andreidevs | Editor upstream; features are reviewed and selectively brought into [our Floor editor fork](https://github.com/Suddl3/hx-edit-unbound/tree/floor). Existing attribution and licence remain intact. |
 
 HX Unbound Floor is to helix-floor-nam-lite what HXtra is to hx-stomp-nam-lite: a separate project layered on top of it. Fixes to the Floor's NAM kernel and DSP work that the plain NAM port can use are offered back to that repository.
 

@@ -1,6 +1,6 @@
 # Floor firmware and editor pairing
 
-The maintained desktop companion is **[Suddl3/hx-edit-nam, floor branch](https://github.com/Suddl3/hx-edit-nam/tree/floor)**. The direct installation guide is **[FLOOR-SETUP.md](https://github.com/Suddl3/hx-edit-nam/blob/floor/FLOOR-SETUP.md)**.
+The maintained desktop companion is **[HX Edit Unbound](https://github.com/Suddl3/hx-edit-unbound)** (formerly hx-edit-nam). Its current branch is `floor-navigation`; the `floor` branch is the older source preview described below. The direct installation guide is **[FLOOR-SETUP.md](https://github.com/Suddl3/hx-edit-unbound/blob/floor-navigation/FLOOR-SETUP.md)**.
 
 We keep the firmware here and desktop workflow there. That lets Suddl3 and savedadodo (Red Dragon) preserve the Floor's tested workflow while reviewing upstream features on their merits. We continue crediting the source projects and contributing useful fixes upstream. A fork is a maintained integration boundary, not a claim to have written the underlying editor or NAM engine.
 
@@ -11,7 +11,7 @@ We keep the firmware here and desktop workflow there. That lets Suddl3 and saved
 | Official desktop prerequisite | Windows Line 6 HX Edit 3.82 and drivers |
 | Official firmware input | Helix Floor 3.80.0, built locally; never distribute a patched `.hxf` |
 | NAM block | Normal `HD2_AmpNAMLite`, preset ID 380, original eight parameters |
-| Floor editor code baseline | [`f72e7af`](https://github.com/Suddl3/hx-edit-nam/tree/f72e7afd9ef073ef1b890fd9ad819bc9d97d0a1e), published Floor-library source with Candidate 53 tab fix |
+| Floor editor code baseline | [`f72e7af`](https://github.com/Suddl3/hx-edit-unbound/tree/f72e7afd9ef073ef1b890fd9ad819bc9d97d0a1e), published Floor-library source with Candidate 53 tab fix |
 | Setup/documentation channel | Editor `floor` branch; current docs commit `c4757ca` |
 | Converter | `andreidevs/helix-lt-nam` tools at `c948347`; not LT firmware for the Floor |
 
@@ -32,4 +32,4 @@ The development Candidate 53 lineage has owner-tested workflow results. The publ
 
 ## Short collaborator note
 
-> I'm keeping a Floor-focused HX Edit fork so the NAM workflow stays consistent with HX Unbound Floor, while still bringing in useful upstream features and contributing fixes back. The Floor repo now links to [our editor setup guide](https://github.com/Suddl3/hx-edit-nam/blob/floor/FLOOR-SETUP.md); use its pinned Floor source preview and launch instructions rather than the newer unfinished navigation candidates.
+> I'm keeping a Floor-focused HX Edit fork so the NAM workflow stays consistent with HX Unbound Floor, while still bringing in useful upstream features and contributing fixes back. The Floor repo now links to [our editor setup guide](https://github.com/Suddl3/hx-edit-unbound/blob/floor/FLOOR-SETUP.md); use its pinned Floor source preview and launch instructions rather than the newer unfinished navigation candidates.
