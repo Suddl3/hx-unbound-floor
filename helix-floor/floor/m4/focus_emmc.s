@@ -56,7 +56,7 @@
 .thumb_func
 fe_hook:                            @ r0 the home view, r1 the frame
     push {r4-r11, lr}
-    sub sp, #0x64                   @ 36 + 100: external calls stay 8-byte aligned; [sp] the block descriptor (0x34 B), [sp, #0x38] a pointer,
+    sub sp, #0x6c                   @ 36 + 108: external calls stay 8-byte aligned; [sp] the block descriptor (0x34 B), [sp, #0x38] a pointer,
                                     @ [0x3c] the colour, [0x44] the NAM knob query (12 B), [0x50] its answer (12 B)
     mov r4, r1
     mov r5, r0
@@ -131,6 +131,10 @@ fh_state:
     bne fh_out
 fh_go:
     ldr r6, =TBL
+    add r0, sp, #0x64
+    ldr r3, =SEL_BLOCK
+    blx r3
+    str r0, [sp, #0x64]             @ the selected block's id from the model: the stock hides its own outline on a Home press
     movs r7, #0                     @ i: 16 path + slot
 fh_loop:
     bl fe_old                       @ first take away the white border this slot had in this frame buffer last time (a block gone, moved or
@@ -164,6 +168,7 @@ fh_loop:
     add r0, r1
     adds r0, #1
     mov r10, r0                     @ the block id
+    str r0, [sp, #0x68]
     mov r0, sp
     movs r1, #0
     movs r2, #0x34
@@ -247,12 +252,12 @@ fh_pic:
     movw r0, #1602
     mul r2, r2, r0
     sub.w r0, r12, r2               @ the frame's first pixel
-    ldrh r1, [r0, #48]              @ the top edge's middle: the stock outline, a grey of 31 (white) on the selected frame
-    and r1, r1, #31
-    cmp r1, #24
-    ite hs
-    movhs r1, #1
-    movlo r1, #0
+    ldr r1, [sp, #0x68]             @ the selected block = the model's selected id (not the stock outline: Home hides that one)
+    ldr r2, [sp, #0x64]
+    cmp r1, r2
+    ite eq
+    moveq r1, #1
+    movne r1, #0
     str r1, [sp, #0x40]             @ 1: the selected block
     str r0, [sp, #0x60]
     cbz r1, fh_nosel
@@ -335,7 +340,7 @@ fh_next:
     cmp r7, #32
     bne fh_loop
 fh_out:
-    add sp, #0x64
+    add sp, #0x6c
     pop {r4-r11, pc}
 
 @ fh_ring: the outline of a 48 x 48 block frame (r0 its first pixel, r1 the category colour spread as above): the 4 pixel band
