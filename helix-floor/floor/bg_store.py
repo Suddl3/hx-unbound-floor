@@ -27,7 +27,7 @@ Assignment (a JSON file, what HX Edit or the owner edits):
                                                       modulation, delay, reverb, pitch (pitchsynth), filter, wah, looper...
                                                       (case-insensitive; `python bg_store.py categories` lists them)
      "preset": {"HD2_AmpEssexA30": "synthwave"}}      by model symbol (Helix.sym); wins over the category
-The scene PNGs are Suddl3/hx-edit-nam focus_backgrounds/backgrounds (800 x 480; rows above FRAME_Y0 and below
+The scene PNGs are Suddl3/hx-edit-unbound src/focus_backgrounds/backgrounds (800 x 480; rows above FRAME_Y0 and below
 FRAME_Y0 + ROWS are black there anyway).
 """
 import json

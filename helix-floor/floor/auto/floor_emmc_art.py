@@ -168,7 +168,14 @@ def stock_blocks():
 
 ICON_HDR = 10                   # header sectors of the icon store (m4/focus_emmc.s HDR_SEC)
 NAM_PID = 380                   # the NAM A2 Lite block's preset id on this firmware
-NAM_ICONS = os.environ.get("NAM_CAPTURE_ICONS", "")   # a clone of Suddl3/hx-edit-nam (capture_icons.py, nam_capture_icons/)
+NAM_ICONS = os.environ.get("NAM_CAPTURE_ICONS", "")   # a clone of Suddl3/hx-edit-unbound (formerly hx-edit-nam)
+
+
+def editor_code(folder):
+    """Where capture_icons.py and nam_capture_icons/ are in a clone of HX Edit Unbound: src/ since 2026-11-16 (the root
+    before), so a clone's root or its src/ both work."""
+    src = os.path.join(folder, "src")
+    return src if os.path.isfile(os.path.join(src, "capture_icons.py")) else folder
 
 
 def nam_slot_icons():
@@ -176,12 +183,13 @@ def nam_slot_icons():
     the slot names are the ones HX Edit remembered from the Floor), and the folder of those pictures."""
     import json
     if not NAM_ICONS:
-        raise SystemExit("set NAM_CAPTURE_ICONS to your clone of Suddl3/hx-edit-nam")
-    sys.path.insert(0, NAM_ICONS)
+        raise SystemExit("set NAM_CAPTURE_ICONS to your clone of Suddl3/hx-edit-unbound")
+    code = editor_code(NAM_ICONS)
+    sys.path.insert(0, code)
     import capture_icons
     mem = os.path.join(os.environ["LOCALAPPDATA"], "HX Edit NAM", "NAM Library", "floor-memory.json")
     slots = json.load(open(mem, encoding="utf-8")).get("slots", {})
-    return {int(k): capture_icons.pick(v.get("name", "")) for k, v in slots.items() if 1 <= int(k) <= 128},         os.path.join(NAM_ICONS, "nam_capture_icons")
+    return {int(k): capture_icons.pick(v.get("name", "")) for k, v in slots.items() if 1 <= int(k) <= 128},         os.path.join(code, "nam_capture_icons")
 
 
 ICON_MAX_SIZE = 44              # the frame's inside (m4/focus_emmc.s: the firmware refuses anything else)

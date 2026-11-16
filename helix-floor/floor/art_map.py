@@ -25,7 +25,7 @@ def open_picture(rel, res=None):
     else the first frame with something drawn."""
     import re
     from PIL import Image
-    alt = os.environ.get("HX_ART_DIR")          # a replacement set with HX Edit's file names (Suddl3's helix_model_icons/hxedit)
+    alt = os.environ.get("HX_ART_DIR")          # a replacement set with HX Edit's file names (HX Edit Unbound's src/helix_model_icons/hxedit)
     if alt and os.path.exists(os.path.join(alt, os.path.basename(rel))) and not re.search(r"%\d+\.png$", rel):
         return Image.open(os.path.join(alt, os.path.basename(rel)))
     im = Image.open(os.path.join(res or RES, rel))

@@ -160,7 +160,7 @@ def blank(fb, cx, cy):
 
 
 drawn(fb, 103, 126, 0x30)                  # picture 2
-drawn(fb, 188, 126, 0x20, dim=(1, 0x3DEF))        # picture 1, halved
+drawn(fb, 188, 126, 0x20)                  # picture 1 (a bypassed frame: not dimmed, the outline says bypassed)
 drawn(fb, 103, 270, 0x10)                  # picture 0
 drawn(fb, 700, 400, 0x10)
 for cx, cy in ((273, 126), (358, 126), (103 + 0, 126 + 0)):
@@ -174,7 +174,7 @@ st["frames"] = []
 fb = run()
 assert sorted(st["params"]) == [1, 2, 11, 21]
 drawn(fb, 103, 126, 0x40)                  # slot 1 -> picture 3
-drawn(fb, 188, 126, 0x20, dim=(1, 0x3DEF))        # slot 5 -> picture 1 (a bypassed frame)
+drawn(fb, 188, 126, 0x20)                  # slot 5 -> picture 1 (a bypassed frame)
 assert not any(fb[((270 - 3) * 800 + 103 - 3) * 2:][:6])           # slot 77: no picture
 assert not any(fb[((126 - 3) * 800 + 103 - 3) * 2 + 0:][:0]) or True
 st["ids"] = {1: 3, 2: 9, 11: 7, 21: 99, 38: 7}
@@ -190,7 +190,7 @@ st["sel"] = 38
 fb = run()
 assert px(fb, 103 - 24, 126) == (28, 4, 2) and px(fb, 103, 126 - 24) == (28, 4, 2)       # an enabled frame (grey 16): the whole category colour
 assert px(fb, 103 + 23, 126 + 23) == (28, 4, 2) and px(fb, 103 - 22, 126 + 22) == (28, 4, 2)
-assert px(fb, 188 - 24, 126) == (3, 0, 0)                                               # a bypassed frame (image 40): 6/32 of its colour
+assert px(fb, 188 - 24, 126) == (5, 1, 0)                                               # a bypassed frame (image 40): 12/32 of its colour
 assert px(fb, 103 - 24, 270) == (14, 2, 1)                                              # grey 8 (a dimmer outline): half
 assert px(fb, 700 - 24, 400) == (28, 4, 2)                                              # selected (white): the same colour as any enabled frame
 # the second border: 2 px white one pixel outside the selected frame (a black gap), rounded; the others wiped, the line's stubs kept
@@ -226,10 +226,10 @@ assert all(px(fb, X0 + k, Y0) == W for k in range(6, 48)), "the border must foll
 assert all(px(fb, 188 - 27 + k, 126 - 27) == (0, 0, 0) for k in range(0, 54)), "grey 31 on a block the model has not selected"
 st["frames"] = [(103, 126, 16), (188, 126, 16), (103, 270, 8), (700, 400, 31)]
 fb = run()
-# enabled blocks' pictures are at full brightness (selected or not), bypassed ones at half
+# every block's picture is at full brightness (enabled or bypassed, selected or not)
 drawn(fb, 700, 400, 0x10)
 drawn(fb, 103, 126, 0x30)
-drawn(fb, 188, 126, 0x20, dim=(1, 0x3DEF))
+drawn(fb, 188, 126, 0x20)
 fb2 = run()
 assert fb2 == fb and st["reads"] == []
 # the tuning words: a selected (white) frame goes toward the category colour with sel_mix, the dimming follows dim_shift / dim_mask
@@ -239,7 +239,7 @@ want = struct.unpack("<H", bytes([0x20, 0x41]))[0]
 src = struct.unpack("<H", bytes([0x20, 0x40]))[0]
 got = struct.unpack("<H", fb4[((126 - S // 2) * 800 + 188 - S // 2) * 2:][:2])[0]
 assert got == src - ((src >> 2) & 0x1CE7), (hex(got), hex(src))
-mu.mem_write(BASE + focus_emmc.LIT + 0x14, struct.pack("<2I", 1, 0x3DEF))
+mu.mem_write(BASE + focus_emmc.LIT + 0x14, struct.pack("<2I", 0, 0))   # back to the default: full
 # a square larger than the picture is blanked first (the stock icon under it): stock pixels in the 8 x 8 are gone
 mu.mem_write(FB, b"\xff" * (800 * 480 * 2))
 mu.reg_write(UC_ARM_REG_R0, VIEW); mu.reg_write(UC_ARM_REG_R1, FB)
