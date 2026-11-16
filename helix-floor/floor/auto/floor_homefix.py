@@ -5,6 +5,7 @@ running on the unit. Each patch checks the unit's bytes against the build's modu
                                   area and force the stock full repaint; an 8-byte jump at module + 512
   floor_homefix.py rt on|off      the gear-menu repaint round trip at Home's release (module + 1440, a `beq de_go` made `b de_go`
                                   when "off" = no round trip)
+  floor_homefix.py knob on|off    the round trip replaced by one do-nothing knob event (m4/rt_knob.bin), same site as `delay`
   floor_homefix.py delay on|off   the earlier experiment (m4/rt_delay.bin: the round trip with a pause), jump at module + 1444
 """
 import os
@@ -66,7 +67,7 @@ def patch(p, off, new16, stub=None):
 
 def main():
     a = sys.argv[1:]
-    if len(a) != 2 or a[0] not in ("pre", "rt", "delay") or a[1] not in ("on", "off"):
+    if len(a) != 2 or a[0] not in ("pre", "rt", "delay", "knob") or a[1] not in ("on", "off"):
         sys.exit(__doc__)
     m = module()
     on = a[1] == "on"
