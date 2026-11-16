@@ -165,7 +165,8 @@ assert names[:4] == ["REGALL_A", "REGALL_B", "REGALL_REST", "REGISTER"], names
 regs = [x for x in log if isinstance(x, tuple) and x[0] == "reg"]
 assert regs[0][1] == 0x52 and regs[0][2] == ((CAVE + sym("fm_cmd")) | 1, 0x280f77fd, 0), regs
 assert regs[1][1] == 0x51 and regs[1][2] == ((CAVE + sym("fm_input")) | 1, 0x280f77fd, 0), regs
-assert len(regs) == 2
+assert regs[2][1] == 0x50 and regs[2][2] == ((CAVE + sym("fm_peekset")) | 1, 0x280f77fd, 0), regs
+assert len(regs) == 3
 print("registration: OK")
 
 # 2. first request: every row, equal to the frame
@@ -191,11 +192,45 @@ print("resync on a seq gap: OK")
 frame2 = bytearray(random.randbytes(W * H * 2))
 mu.mem_write(FB1, bytes(frame2))
 mu.mem_write(LCD + 0x10, struct.pack("<I", FB1))
-fb, _, rows, got = request(10)
+fb, _, rows, got = request(12)                     # a seq gap: every row (the 8-bit row hashes can collide)
 assert fb == FB1 and all(got[i] == frame2[i * ROW:(i + 1) * ROW] for i in rows) and len(rows) == H
 mu.mem_write(LCD + 0x10, struct.pack("<I", 0))
 assert request(1)[0] == FB0
 print("frame address: OK")
+
+# 2b. CMD 0x50 (fm_peekset): the next frames read memory from seq << 17; 0 goes back to the screen
+def peekset(seq):
+    req = 0x20003000
+    mu.mem_write(req, bytes(12) + struct.pack("<H", seq))
+    out.clear()
+    del log[:]
+    assert call("fm_peekset", STREAM, req) == 0x55 and "done" in log
+
+peekset(0x1400)                                   # 0x1400 << 17 = 0x28000000
+assert request(1)[0] == 0x28000000 and request(2)[0] == 0x28000000
+peekset(0)
+assert request(1)[0] == FB0
+print("peek window: OK")
+
+# 2c. the live poke (bit 15): set the pointer 14 bits at a time, write bytes, call the code at the pointer
+def poke_addr(a):
+    for sh in (28, 14, 0):
+        peekset(0x8000 | 0x4000 | (a >> sh) & 0x3fff)
+
+AREA = 0x29f00000
+poke_addr(AREA)
+assert struct.unpack("<I", mu.mem_read(CAVE + sym("fm_ptr"), 4))[0] == AREA
+# a function: r0 += 1; [AREA + 0x100] = r0; bx lr   (adds r0, #1; ldr r1, [pc, #4]; str r0, [r1]; bx lr; .word AREA + 0x100)
+fn = struct.pack("<4H", 0x3001, 0x4901, 0x6008, 0x4770) + struct.pack("<I", AREA + 0x100)
+for b in fn:
+    peekset(0x8000 | b)
+assert bytes(mu.mem_read(AREA, len(fn))) == fn
+assert struct.unpack("<I", mu.mem_read(CAVE + sym("fm_ptr"), 4))[0] == AREA + len(fn)
+assert request(1)[0] == FB0                       # poking leaves the peek window alone
+poke_addr(AREA)
+peekset(0x8000 | 0x2000 | 41)                     # call with r0 = 41
+assert struct.unpack("<I", mu.mem_read(AREA + 0x100, 4))[0] == 42
+print("live poke: pointer, bytes, call: OK")
 
 
 def press(seq):
@@ -226,10 +261,13 @@ assert press(ev(1, 0x11, 2)) == [struct.pack("<BBxxi", 1, 0x11, 2)]          # i
 assert press(ev(1, 63, 5)) == [struct.pack("<BBxxi", 1, 63, 5)]              # a hold
 assert press(ev(2, 3, -4)) == [struct.pack("<BBxxi", 2, 3, -4)]              # knob 4 back a step
 assert press(ev(2, 0, 31)) == [struct.pack("<BBxxi", 2, 0, 31)]
-assert press(ev(0, 1, 1)) == [] and press(ev(3, 1, 1)) == [] and press(ev(6, 1, 1)) == []   # other classes: no post
+assert press(ev(0, 1, 1)) == [struct.pack("<BBxxi", 1, 65, 1)]                # class 0: key 64 + code
+assert press(ev(3, 5, 2)) == [struct.pack("<BBxxi", 1, 133, 2)]                # class 3: key 128 + code
+assert press(ev(4, 63, 1)) == [struct.pack("<BBxxi", 1, 255, 1)]               # class 4: key 192 + code
+assert press(ev(5, 1, 1)) == [] and press(ev(6, 1, -1)) == [] and press(ev(7, 0, 1)) == []   # 5..7 refused
 assert press(0x1234) == []                                                   # no bit 15: a reply only
 # the mirror's own seq is untouched: the next frame request (seq 2 after request(1)) still gets only changed rows
 assert request(2)[2] == []
-print("remote input: keys, knobs, other classes refused, reply, mirror seq kept: OK")
+print("remote input: keys 0..255, knobs, classes 5..7 refused, reply, mirror seq kept: OK")
 print("sleeps per full hash pass:", log.count("SLEEP"))
 print("ALL PASS")

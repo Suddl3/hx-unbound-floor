@@ -18,6 +18,23 @@
 .thumb
 .fpu fpv4-sp-d16
 
+.equ POST_A, 0x28175a08             @ the UI event post's (0x2808b668) first two literals
+.equ POST_B, 0x281759d0
+.equ POST_ENTRY, 0x2808b669         @ the UI event post, as called (through the trampoline, so dm_event again)
+.equ POST_BODY, 0x2808b671          @ it goes on here (its first 8 bytes are replayed by dm_event)
+.equ HOME_VIEW, 0x2818c21c          @ its word 0 is 1 while the home view is the active screen
+.equ FOCUS_Y, 52                    @ Focus View blanks the paths: below the title bar ...
+.equ FOCUS_H, 288                   @ ... down to the bottom panel (y 340)
+.equ IMG_WIDGET_PAINT, 0x2808e56d  @ (frame, -, widget): the image widget's paint
+.equ IMG_LOOKUP, 0x2808af15         @ (index, &handle, &size): the image store's lookup, < 0 when missing
+.equ IMG_DRAW, 0x2808cbed           @ (frame, handle, x, y; stack w, h, flag): draws an image, as the image widget paint does
+.equ SEL_PIC, 4094                  @ dm_imgs index meaning the selected block's picture (floor_art.py sends 4094 for "sel")
+.equ ART_BASE, 1093                 @ NAM_ART=map: Entry 9 item ART_BASE + preset id is that model's picture (stage_art.py)
+.equ N_PIDS, 833                    @ preset ids 0..832
+.equ SEL_BLOCK, 0x281043e9          @ (out byte) -> the selected block's id
+.equ MEMSET, 0x28155f35             @ (dst, byte, n)
+.equ PRESET_OBJ, 0x28114a1d         @ () -> the current preset
+.equ BLOCK_DESC, 0x28148ccd         @ (preset, block id, desc 0x34 B) -> < 0 when none
 .equ STOCK_PAINT, 0x280d6be9        @ the home view's paint (fb, view)
 .equ GET_VALUE, 0x28150829          @ (id, out): a Global Setting, value at out + 4
 .equ ID_BLOCKS, 74                  @ Preferences "DSP Meter / Blocks": a spare main-store ID, stock limits int 0..1, default 1
@@ -75,9 +92,8 @@ dm_paint:                           @ r0 the frame, r1 the home view
     cmp r0, #0
     blt dm_cfg_paths
     ldr r0, [sp, #132]
-    cmp r0, #0
-    it ne
-    movne r0, #1
+    clz r0, r0
+    lsrs r0, r0, #5                 @ 1 only for a value of 0: 0 = On, 1 = Off (the setting's stock default 1 makes the labels Off)
     strb r0, [r6]
 dm_cfg_paths:
     movs r0, #ID_PATHS
@@ -211,7 +227,7 @@ dm_summed:
     bne dm_sum
     adr.w r0, dm_cfg
     ldrb r0, [r0, #1]
-    cmp r0, #2
+    cmp r0, #1                      @ 1 = Meters (the stock default of the setting), 2 = Numbers
     bne dm_numbers
     cmp r11, #0xff                  @ meters: "Pn" and a bar, the slot's whole width (the bar stops at 75)
     it hi
@@ -269,6 +285,11 @@ dm_drawn:
     adds r6, #1
     cmp r6, #NTRACK
     bne dm_draw
+    adr.w r3, dm_cfg                @ Focus View (dm_cfg + 2): the paths' area blanked, a placeholder block in it
+    ldrb r3, [r3, #2]
+    cbz r3, dm_unfocused
+    bl focus_fill
+dm_unfocused:
     ldr r0, [sp, #128]
     add sp, #140
     pop {r4-r11, pc}
@@ -464,6 +485,97 @@ lb_out:
     add sp, #16
     pop {r5-r11, pc}
 
+focus_fill:                         @ r4 the frame: the paths' area blanked, the placeholder block in it
+    push {r10, lr}
+    movs r10, #0
+    movs r0, #0
+    movs r1, #FOCUS_Y
+    movw r2, #W
+    movw r3, #FOCUS_H
+    bl fill
+    bl focus_img
+    pop {r10, pc}
+
+focus_img:                          @ r4 the frame: every image of dm_imgs (index, x, y, w, h; 0xffff ends) through the stock image widget's paint
+    push {r5-r7, lr}                @ (0x2808e56c: it takes the widget lock itself) on a widget of ours (on the stack): no parent,
+    sub sp, #0x28                   @ visible
+    adr.w r6, dm_imgs
+    mov r7, sp
+fi_loop:
+    ldrh r0, [r6]
+    movw r1, #0xffff
+    cmp r0, r1
+    beq fi_done
+    movw r1, #SEL_PIC
+    cmp r0, r1
+    bne fi_have
+    bl focus_pid
+    cmp r0, #0
+    blt fi_next
+fi_have:
+    str r0, [r7]
+    str r0, [r7, #4]
+    mvn r1, #0
+    str r1, [r7, #8]                @ no mask colour
+    ldrh r1, [r6, #2]
+    str r1, [r7, #0xc]
+    ldrh r1, [r6, #4]
+    str r1, [r7, #0x10]
+    ldrh r1, [r6, #6]
+    str r1, [r7, #0x14]
+    ldrh r1, [r6, #8]
+    str r1, [r7, #0x18]
+    movw r1, #0x101                 @ +0x1c the anchor (1: x is the centre), +0x1d visible
+    strh r1, [r7, #0x1c]
+    movs r1, #0
+    str r1, [r7, #0x20]
+    str r1, [r7, #0x24]
+    mov r0, r4
+    mov r2, r7
+    ldr r3, =IMG_WIDGET_PAINT
+    blx r3
+fi_next:
+    adds r6, #10
+    b fi_loop
+fi_done:
+    add sp, #0x28
+    pop {r5-r7, pc}
+
+focus_pid:                          @ -> r0 the selected block's picture (ART_BASE + its preset id), or < 0 (empty, none). As the
+    push {r4, lr}                   @ block title's callers (0x280a5f20): selected block, its descriptor; preset id = word at +1
+    sub sp, #0x40
+    add r0, sp, #0x38
+    ldr r3, =SEL_BLOCK
+    blx r3
+    mov r4, r0
+    mov r0, sp
+    movs r1, #0
+    movs r2, #0x34
+    ldr r3, =MEMSET
+    blx r3
+    ldr r3, =PRESET_OBJ
+    blx r3
+    mov r1, r4
+    mov r2, sp
+    ldr r3, =BLOCK_DESC
+    blx r3
+    cmp r0, #0
+    blt fp_none
+    ldr r0, [sp]
+    lsrs r0, r0, #8
+    ldrb r1, [sp, #4]
+    orr r0, r0, r1, lsl #24
+    movw r1, #N_PIDS
+    cmp r0, r1
+    bhs fp_none                     @ (also -1, an empty block)
+    addw r0, r0, #ART_BASE
+    b fp_out
+fp_none:
+    mvn r0, #0
+fp_out:
+    add sp, #0x40
+    pop {r4, pc}
+
 fill:                               @ r0 x, r1 y, r2 width, r3 height (on the screen), r10 the colour, r4 the frame
     push {r5, r6}
     mov.w r12, #W
@@ -523,12 +635,87 @@ dt_done:
     movs r0, #0
     bx lr
 
+@ dm_event: the UI event post (0x2808b668) enters here through a trampoline over its first 8 bytes (push {r3-r7, lr};
+@ mov r5, r0; ldr r0, =A; ldr r6, =B), which are replayed. Home (key 2, value 0 on the panel, 1 from the mirror's input)
+@ pressed while the home view is the active screen flips Focus View (dm_cfg + 2); the event goes on to the stock post.
+.thumb_func
+dm_event:
+    push {r3-r7, lr}
+    mov r5, r0
+    ldrb r2, [r5]
+    cmp r2, #1
+    bne de_go
+    ldrb r2, [r5, #1]
+    cmp r2, #2
+    bne de_go
+    adr.w r3, dm_cfg
+    ldrb r1, [r3, #3]               @ bit 0 a repaint is due, bit 1 our own Home is being posted
+    tst r1, #2
+    bne de_go
+    ldrb r2, [r5, #4]
+    cmp r2, #1
+    bhi de_rel
+    ldr r2, =HOME_VIEW              @ the press: flip Focus View when the home view is the active screen
+    ldr r2, [r2]
+    cmp r2, #1
+    bne de_go
+    ldrb r2, [r3, #2]
+    eor r2, r2, #1
+    strb r2, [r3, #2]
+    orr r1, r1, #1
+    strb r1, [r3, #3]
+    cbz r2, de_go
+    ldr r4, =FB0                    @ on: blank both framebuffers now (the screen shows one, the next paint the other)
+    bl focus_fill
+    ldr r4, =FB0 + 0xbb800
+    bl focus_fill
+    b de_go
+de_rel:
+    cmp r2, #2                      @ the release: the stock only repaints what changed, so a gear menu round trip
+    bne de_go                       @ (key 19, then Home) repaints the whole home screen. Done here, not in the press,
+    tst r1, #1                      @ where the button task is still busy with the press
+    beq de_go
+    movs r1, #2
+    strb r1, [r3, #3]
+    sub sp, #8
+    adr.w r6, dm_seq
+    movs r4, #4
+de_next:
+    movs r0, #1
+    strb r0, [sp]
+    ldrb r0, [r6], #1
+    strb r0, [sp, #1]
+    movs r0, #0
+    strh r0, [sp, #2]
+    ldrb r0, [r6], #1
+    str r0, [sp, #4]
+    mov r0, sp
+    ldr r3, =POST_ENTRY
+    blx r3
+    subs r4, #1
+    bne de_next
+    add sp, #8
+    adr.w r3, dm_cfg
+    movs r2, #0
+    strb r2, [r3, #3]
+de_go:
+    ldr r0, =POST_A
+    ldr r6, =POST_B
+    ldr r12, =POST_BODY
+    bx r12
+
 .ltorg
 .balign 4
+dm_imgs:                            @ Focus View's pictures: index, centre x, top y, width, height (0xffff ends); room for 4, written
+    .hword SEL_PIC, 400, 174, 44, 44    @ live with the mirror's poke (auto/floor_art.py). Index SEL_PIC: the selected block's own picture
+    .fill 16, 2, 0xffff
+dm_seq:                             @ key, value: gear menu press and release, Home press and release
+    .byte 19, 1, 19, 2, 2, 1, 2, 2
+.balign 4
 dt_onoff:
-    .ascii "Off\0\0\0\0\0On\0\0\0\0\0\0"
+    .ascii "On\0\0\0\0\0\0Off\0\0\0\0\0"
 dt_modes:
-    .ascii "Off\0\0\0\0\0Numbers\0Meters\0\0"
+    .ascii "Off\0\0\0\0\0Meters\0\0Numbers\0"
 .balign 2
 dm_font:                            @ 3x5 glyphs, bit 14 the top left cell, rows of 3 bits: 0..9, '/', 'P', ' '
     .hword 0b111101101101111, 0b010110010010111, 0b111001111100111, 0b111001111001111, 0b101101111001001

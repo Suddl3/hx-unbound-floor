@@ -13,6 +13,7 @@
 
 usage: stage_main.py <in.l6ia> <out.l6ia>
 """
+import json
 import struct
 import sys
 
@@ -26,6 +27,8 @@ import arm_guards  # noqa: E402
 import ir_title  # noqa: E402
 import screen_mirror  # noqa: E402
 import dsp_meter  # noqa: E402
+import focus_emmc  # noqa: E402
+import clk_stop  # noqa: E402
 
 E_MAIN, E_COPY, E_DB = 0, 1, 4
 TAB1_BASE_PTRS = (0x28134D70, 0x28134DBC, 0x28134DD4, 0x28134EC8, 0x28134F80)
@@ -278,7 +281,28 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
     if dsp_meter.ENABLED:                              # NAM_DSP_METER=1: block costs on the home view (dsp_meter.py)
         dcode, dsyms = dsp_meter.load()
         meter = (put(dcode), dcode, dsyms)
+    ck = None
+    if clk_stop.ENABLED:                               # NAM_CLK_STOP=1: Transparent also on the MIDI clock stop (clk_stop.py)
+        # no room left in the seg0 cave beside the mirror and the meter: the wrappers go after segment 1's bytes
+        # (local SRAM bank 2, where the Focus View reader also lives), behind the reader when there is one
+        cbase = focus_emmc.VA + (((len(focus_emmc.load()) + 3) & ~3) if focus_emmc.ENABLED else 0)
+        ccode, cwrap = clk_stop.build(cbase)
+        assert cbase + len(ccode) <= focus_emmc.END, "clock-stop wrappers do not fit after segment 1"
+        ck = (cbase, ccode, cwrap)
     assert CAVE + len(cave) <= CAVE_END, f"cave {len(cave)} bytes, room {CAVE_END - CAVE}"
+    fe = None
+    if focus_emmc.ENABLED:                             # NAM_EMMC_ART=1: Focus View's pictures from the eMMC store
+        assert meter, "NAM_EMMC_ART needs NAM_DSP_METER"
+        mpatch, focus_fill = focus_emmc.patches(meter[0], meter[1])
+        pre_ret = focus_emmc.pre_ret(meter[0], meter[1])     # before the module is patched: it finds dm_paint's stock-paint call
+        dpatched = bytearray(meter[1])
+        for off, jb in mpatch.items():
+            cave[meter[0] - CAVE + off:meter[0] - CAVE + off + len(jb)] = jb
+            dpatched[off:off + len(jb)] = jb
+        meter = (meter[0], bytes(dpatched), meter[2])   # verify() reads the module back with the patches in
+        fe = (focus_emmc.with_literals(focus_emmc.load(), meter[0] + meter[2]["dm_cfg"], focus_fill,
+                                       pre_ret),
+              [(meter[0] + off, jb) for off, jb in mpatch.items()])
     # pointers and counts (all in seg2: the file offsets don't move with seg0's growth... they do,
     # so everything is written before the cave is spliced in)
     for p in TAB1_BASE_PTRS:
@@ -306,6 +330,12 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
         log.append(screen_mirror.apply(im, mirror[0], mirror[2]))
     if meter:
         log.append(dsp_meter.apply(im, meter[0], meter[2]))
+    if ck:
+        for va, want in clk_stop.STOCK.items():
+            assert im.rd(va, len(want)) == want, f"clock-stop site {va:#x} is not stock: {im.rd(va, len(want)).hex()}"
+        for va, b in clk_stop.site_patches(ck[2]).items():
+            im.wr(va, b)
+        log.append(f"clock-stop Transparent fix: wrappers {ck[0]:#x} ({len(ck[1])} B), {len(clk_stop.SITES)} sites")
     # splice the cave after seg0's bytes and move every later segment
     b, segs = im.b, im.segs
     h0, p0, l0, d0, n0 = segs[0]
@@ -315,6 +345,16 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
     for h, p, l, d, n in segs[1:]:
         struct.pack_into('<3I', out, h + delta, l, d, n + delta)
     struct.pack_into('<I', out, 4, len(out))
+    if fe or ck:                                       # code after segment 1's bytes: the Focus View reader, then the clock-stop wrappers
+        tail = (fe[0] + bytes((-len(fe[0])) & 3)) if fe else b""
+        if ck:
+            assert focus_emmc.VA + len(tail) == ck[0], "clock-stop wrappers are not where the sites point"
+        out = bytearray(focus_emmc.append_to_seg1(bytes(out), segments, tail + (ck[1] if ck else b"")))
+        if fe:
+            log.append(f"Focus View from the eMMC store: {len(fe[0])} B at {focus_emmc.VA:#x} (after segment 1); "
+                       "focus_img -> fe_img, the end of dm_paint -> bl fe_hook (the block icons)")
+        if ck:
+            log.append(f"clock-stop wrappers appended after segment 1 at {ck[0]:#x} ({len(ck[1])} B)")
     out = l6ia.fix_internal_crcs(bytes(out))
     log.append(f"seg0 {l0:#x} -> {l0 + delta:#x} bytes (cave {CAVE:#x}..{CAVE + delta:#x}, "
                f"{CAVE_END - CAVE - delta} bytes left); Entry 0 {len(e0):#x} -> {len(out):#x}")
@@ -322,7 +362,7 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
     log.append(f"IR-name title: caves {ca:#x} / {cb:#x} ({len(tcode)} B); sites {ir_title.SITE_A:#x}, "
                f"{ir_title.SITE_B:#x} (via relay {ir_title.RELAY:#x}) for preset id {pid}")
     log.append(f"tables at Table 1 {a1:#x}, Table 2 {a2:#x}, lists " + ", ".join(f"({i // 4},{i % 4}) {v:#x}" for i, _, v in la))
-    return out, pid, log, (a1, a2, la, ca, cb, tcode, mirror, meter)
+    return out, pid, log, (a1, a2, la, ca, cb, tcode, mirror, meter, fe, ck)
 
 
 def verify(e0, src_ni, new_ni, addrs, xeno_ni=None):
@@ -330,7 +370,10 @@ def verify(e0, src_ni, new_ni, addrs, xeno_ni=None):
     code in the cave run through the guard tests' interpreter."""
     n_t1 = 823 if E555 else 824
     im = Image(e0)
-    a1, a2, la, ca, cb, tcode, mirror, meter = addrs
+    a1, a2, la, ca, cb, tcode, mirror, meter, fe, ck = addrs
+    if fe:
+        assert im.rd(focus_emmc.VA, len(fe[0])) == fe[0], "Focus View eMMC reader"
+        assert all(im.rd(va, len(b)) == b for va, b in fe[1]), "Focus View eMMC reader's patches in the DSP meter"
     for va, b in ir_title.site_patches(ca, cb).items():
         assert im.rd(va, len(b)) == b
     assert im.rd(ca, len(tcode)) == tcode
@@ -343,6 +386,10 @@ def verify(e0, src_ni, new_ni, addrs, xeno_ni=None):
         assert im.rd(dva, len(dcode)) == dcode
         for va, want in dsp_meter.patches(dva, dsyms).items():
             assert im.rd(va, len(want)) == want, f"DSP meter patch at {va:#x}"
+    if ck:
+        assert im.rd(ck[0], len(ck[1])) == ck[1], "clock-stop wrappers"
+        for va, b in clk_stop.site_patches(ck[2]).items():
+            assert im.rd(va, len(b)) == b, f"clock-stop site {va:#x}"
     assert all(im.u32(p) == a1 for p in TAB1_BASE_PTRS)
     assert pa._decode_thumb_movw(im.rd(TAB1_CNT_INSN, 4))[1] == n_t1 and im.u32(TAB1_END_PTR) == a1 + 12 * n_t1
     assert im.u32(TAB2_BASE_PTR) == a2 and pa._decode_thumb_movw(im.rd(TAB2_CNT_INSN, 4))[1] == 824
@@ -363,6 +410,21 @@ def verify(e0, src_ni, new_ni, addrs, xeno_ni=None):
     assert im.rd(arm_guards.TRAMP, 8) == arm_guards.tramp_bytes()
     assert im.rd(CAVE, len(arm_guards.build().assemble())) == arm_guards.build().assemble()
     return "read back: pointers, counts, new rows, trampoline and HOOK bytes as built"
+
+
+def live_addresses(addrs):
+    """What auto/floor_poke.py's live.json holds for this build (the build writes it beside its output, so no tool has to
+    guess or keep a stale one): the mirror and meter modules' bases and the words the live tools use."""
+    mirror, meter = addrs[6], addrs[7]
+    live = {}
+    if mirror:
+        live["mirror"] = hex(mirror[0])
+        live["fm_ptr"] = hex(mirror[0] + mirror[2]["fm_ptr"])
+    if meter:
+        live["meter"] = hex(meter[0])
+        live["dm_imgs"] = hex(meter[0] + meter[2]["dm_imgs"])
+        live["dm_cfg"] = hex(meter[0] + meter[2]["dm_cfg"])
+    return live
 
 
 def main():
@@ -391,6 +453,10 @@ def main():
     open(out, 'wb').write(img)
     for line in log + [msg]:
         print(line)
+    live = live_addresses(addrs)
+    if live:
+        json.dump(live, open(out + ".live.json", "w"), indent=1)
+        print(f"wrote {out}.live.json: {live}")
     print(f"wrote {out}")
 
 

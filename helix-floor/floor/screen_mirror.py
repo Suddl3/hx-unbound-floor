@@ -23,9 +23,12 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, "m4", "floor_mirror.s")
-BIN = os.path.join(HERE, "m4", "floor_mirror.bin")
-SYMS = os.path.join(HERE, "m4", "floor_mirror.json")
 ENABLED = os.environ.get("NAM_SCREEN_MIRROR") == "1"
+SPY = ENABLED and os.environ.get("NAM_MIRROR_SPY") == "1"   # EXPERIMENT: log the UI events (floor/auto/floor_spy.py)
+_SFX = "_spy" if (SPY or "--spy" in sys.argv) else ""
+BIN = os.path.join(HERE, "m4", f"floor_mirror{_SFX}.bin")
+SYMS = os.path.join(HERE, "m4", f"floor_mirror{_SFX}.json")
+POST = 0x2808b668                   # the UI's event post, which the spy hooks
 REGALL = 0x280ee594                 # the editor's command registrations: the trampoline's site (4-byte aligned)
 
 # Every firmware address floor_mirror.s uses, with its stock first bytes (found from HXtra's Stomp addresses by
@@ -59,7 +62,7 @@ def assemble(*, check=False, update_symbols=False):
         with open(SRC, "rb") as f:
             source_bytes = f.read()
         with open(source, "wb") as f:
-            f.write(source_bytes)
+            f.write((b".set SPY, 1" + bytes([10]) if _SFX else b"") + source_bytes)
         zig = [sys.executable, "-m", "ziglang"]
         env = dict(os.environ, ZIG_LOCAL_CACHE_DIR=os.path.join(d, "local-cache"),
                    ZIG_GLOBAL_CACHE_DIR=os.path.join(d, "global-cache"))
@@ -120,6 +123,9 @@ def apply(im, code_va, syms):
     check_stock(im)
     assert REGALL % 4 == 0 and code_va % 4 == 0
     im.wr(REGALL, tramp(code_va + syms["fm_regall"]))
+    if SPY:
+        assert im.rd(POST, 8).hex() == "f8b505461148124e", "the UI event post is not stock"
+        im.wr(POST, tramp(code_va + syms["fm_spy"]))
     return (f"screen mirror: {len(load()[0])} B at {code_va:#x}; {REGALL:#x} -> ldr.w pc, [pc] ; "
             f".word {(code_va + syms['fm_regall']) | 1:#x}; editor command 0x52")
 
