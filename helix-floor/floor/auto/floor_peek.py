@@ -21,6 +21,7 @@ import floor_mirror  # noqa: E402
 CMD_PEEK = 0x50
 LO, HI = 0x28000000, 0x2A000000
 FRAME = 480 * 1600
+REACH = (HI - FRAME & ~((1 << 17) - 1)) + FRAME   # the last byte a window can show (the end of the top window)
 STEP = 5 * (1 << 17)                    # the window's useful step: 5 x 128 KB = 655,360 of the 768,000
 
 
@@ -47,12 +48,13 @@ class Peek:
         return self.m.img.tobytes()
 
     def read(self, addr, n):
-        assert LO <= addr and addr + n <= HI, (hex(addr), n)
+        assert LO <= addr and addr + n <= REACH, (hex(addr), n, "(the last 18 KB of SDRAM is beyond the last window)")
         out, a = bytearray(), addr
         while len(out) < n:
             base = a & ~((1 << 17) - 1)
             if base + FRAME > HI:
                 base = HI - FRAME & ~((1 << 17) - 1)
+            assert a < base + FRAME, hex(a)
             data = self.window(base)
             off = a - base
             take = min(n - len(out), len(data) - off)
