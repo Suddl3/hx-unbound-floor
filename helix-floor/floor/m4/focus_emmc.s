@@ -38,7 +38,7 @@
 @ build, or auto/floor_emmc_art.py live, writes `mov r0, r5; mov r1, r4; bl fe_hook` over them). Focus View on: focus_fill as
 @ before. Off: for each of the 32 block image widgets (view + 0x64 + 0x4c0 path + 0x4c slot: visible, 48 x 48 = a block frame
 @ image, index at +0) the model's small picture goes inside the stock frame, which stays as it is: the 38 x 38 inside is
-@ blanked, the 36 x 36 picture drawn on it (halved in brightness on the bypassed frames, found by the image index in the
+@ blanked, the 36 x 36 picture drawn on it (not dimmed on the bypassed frames, found by the image index in the
 @ store's bitmap). The block's preset id comes from the same lookup as the block title's (block id 10 (2 path + slot / 8) +
 @ slot % 8 + 1). Icon store at ICON_STORE (auto/floor_emmc_art.py icons): sector 0: "HXPI", +4 u16 S, +6 u16 preset ids,
 @ +8 u32 first picture sector, +12 u16 pictures, +14 u16 sectors a picture, +16 bitmap of the Off frame images (1024 bits),
@@ -346,7 +346,7 @@ fh_out:
 @ fh_ring: the outline of a 48 x 48 block frame (r0 its first pixel, r1 the category colour spread as above): the 4 pixel band
 @ round the edge, where every grey pixel (the stock outline: a grey of 16 in 5 bits on a plain frame, 31 = white on the selected
 @ one, 6 on the bypassed ones, in between at the edges) becomes the category colour: all of it on an enabled frame (selected or
-@ not), 6/32 of it on a bypassed one (a category without a colour, 0, is left as it is).
+@ not), 12/32 of it on a bypassed one (a category without a colour, 0, is left as it is).
 fh_ring:
     push {r4-r9, lr}
     movw r4, #0x7c1f
@@ -394,9 +394,10 @@ fr_run:                             @ r7 pixel, r8 count
     lsls r3, r3, #1
     b fr_lin
 fr_byp:
-    cmp r3, #6                      @ a bypassed frame: 6/32 of the colour, selected or not
+    cmp r3, #6                      @ a bypassed frame: 12/32 of the colour, selected or not
     it hi
     movhi r3, #6
+    lsls r3, r3, #1                 @ doubled: 12/32
 fr_lin:
     mul r2, r1, r3
     add r2, r5
@@ -779,9 +780,9 @@ dm_cfg_p:
     .word 0                         @ the meter's focus_fill, Thumb bit set
     .word 0                         @ fi_state
     .word 0, 0                      @ dim (shift, mask) of the art, by state (poked live to tune): enabled: full
-    .word 1, 0x3def                 @ bypassed, not selected: half
+    .word 0, 0                      @ bypassed, not selected: full (the outline says bypassed)
     .word 0, 0                      @ on, selected: full
-    .word 1, 0x3def                 @ bypassed, selected: half
+    .word 0, 0                      @ bypassed, selected: full
 .balign 4
 fe_fbs:
     .word 0, 0                      @ the two frame buffers seen
