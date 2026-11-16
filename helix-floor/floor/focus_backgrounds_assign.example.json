@@ -1,14 +1,19 @@
 {
- "scenes": ["synthwave", "neon_rain"],
+ "scenes": ["synthwave", "neon_rain", "foh_desk", "rack", "patch_bay", "anodized", "road_cases", "black", "soft_glow"],
  "default": "synthwave",
  "category": {
   "amp": "neon_rain",
   "cab": "neon_rain",
   "preamp": "neon_rain",
-  "input": null,
-  "output": null,
-  "sendreturn": null,
-  "split": null,
-  "merge": null
+  "input": "foh_desk",
+  "output": "rack",
+  "sendreturn": "patch_bay",
+  "split": "road_cases",
+  "merge": "black",
+  "looper": "soft_glow"
+ },
+ "preset": {
+  "HD2_SendMono1": "anodized", "HD2_SendMono2": "anodized", "HD2_SendMono3": "anodized", "HD2_SendMono4": "anodized",
+  "HD2_SendStereo1_2": "anodized", "HD2_SendStereo3_4": "anodized"
  }
 }
