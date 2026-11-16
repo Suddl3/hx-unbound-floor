@@ -788,3 +788,54 @@ fe_cached:
     .word 0xffffffff                @ the picture in the cache
 fe_bgcached:
     .word 0xffffffff                @ the background (slot) in BGCACHE
+
+@ ---- fe_pre: Focus View's exit cleanup, in the paint task (the owner's double-Home bug, FINDINGS 2026-11-16) ------------------
+@ A jump over dm_paint's `ldr.w r3, [pc, #0x400]; blx r3; str r0, [sp, #0x80]` (8 bytes: the stock paint of the home view, its result
+@ kept) comes here, r4 the frame, r5 the view. With Focus View off, twelve pixels of the frame in a band the home view leaves black
+@ (y 180, x 150 .. 700 step 50) are ORed: if any is lit the scene is still in this frame, so the paths' area (y 52 .. 339) is blanked
+@ and the view's full-repaint flag (view + 0x5f) is set, and the stock paint then draws every item. Stateless: no press timing, burst
+@ or flag change mid-paint can leave the scene behind. The stock paint is then called as the replaced code did and the code goes on
+@ at fp_ret (the build: the instruction after the eight bytes, `movs r6, #0`).
+.equ FP_FROM, 52 * 1600
+.equ FP_SIZE, 288 * 1600
+.equ FP_PROBE0, 180 * 1600 + 2 * 150
+.equ FP_STEP, 100
+.equ FP_STOCK_PAINT, 0x280d6be9
+.org 0x9f0
+fp_ret:
+    .word 0                         @ (the build fills it: the module's address after the replaced instructions, Thumb bit set)
+.org 0xa00
+.thumb_func
+fe_pre:
+    push {r0-r3, r6-r8, r12}        @ eight words: the calls below stay 8-byte aligned
+    adr.w r12, dm_cfg_p
+    ldr r7, [r12]
+    ldrb r2, [r7, #2]               @ Focus View now
+    cbnz r2, fp_done                @ on: the paint draws the scene itself
+    ldr r0, =FP_PROBE0
+    movs r6, #0
+    movs r7, #12
+fp_probe:
+    ldrh r3, [r4, r0]
+    orrs r6, r6, r3
+    adds r0, r0, #FP_STEP
+    subs r7, r7, #1
+    bne fp_probe
+    cbz r6, fp_done                 @ black: nothing of the scene is left in this frame
+    ldr r0, =FP_FROM
+    add r0, r4
+    movs r1, #0
+    ldr r2, =FP_SIZE
+    ldr r3, =MEMSET
+    blx r3
+    movs r3, #1
+    strb r3, [r5, #0x5f]            @ the stock paint draws everything
+fp_done:
+    pop {r0-r3, r6-r8, r12}
+    ldr r3, =FP_STOCK_PAINT
+    blx r3
+    str r0, [sp, #0x80]
+    adr.w r12, fp_ret
+    ldr r12, [r12]
+    bx r12
+.ltorg

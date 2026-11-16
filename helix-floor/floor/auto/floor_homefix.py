@@ -37,6 +37,14 @@ def read16(p, addr):
         pk.close()
 
 
+def apply(p, addr, new16):
+    """patch_atomic, then read the 16 bytes back: a patch that did not take is an error, not a silent state mix-up."""
+    p.patch_atomic(addr, new16)
+    got = read16(p, addr)
+    if got != new16:
+        raise SystemExit(f"patch at {addr:#x} did not take: {got.hex()} instead of {new16.hex()}")
+
+
 def upload(p, name, at):
     code = open(os.path.join(ev.M4, name), "rb").read()
     p.write_bulk(at, code)
@@ -62,7 +70,7 @@ def patch(p, off, new16, stub=None):
         raise SystemExit(f"the module on the unit is not the expected one at +{off}: {have.hex()} vs {orig.hex()}")
     if stub:
         upload(p, *stub)
-    p.patch_atomic(addr, new16)
+    apply(p, addr, new16)
 
 
 def main():
@@ -80,7 +88,7 @@ def main():
             if on:
                 patch(p, off, jump, ("fe_pre.bin", stub))
             else:
-                p.patch_atomic(base() + off, m[off:off + 16])
+                apply(p, base() + off, m[off:off + 16])
         elif a[0] == "delay":
             off = 1444
             stub = 0x29F07400
@@ -88,13 +96,13 @@ def main():
             if on:
                 patch(p, off, jump, ("rt_delay.bin", stub))
             else:
-                p.patch_atomic(base() + off, m[off:off + 16])
+                apply(p, base() + off, m[off:off + 16])
         else:                           # rt: "on" = the stock behaviour (round trip), "off" = no round trip
             off = 1440
             new = m[off:off + 2] + b"\x1c\xe0" + m[off + 4:off + 16]   # 1442: `beq de_go` -> `b de_go` (1502)
             assert m[1442:1444] != b"\x1c\xe0"
             if on:
-                p.patch_atomic(base() + off, m[off:off + 16])
+                apply(p, base() + off, m[off:off + 16])
             else:
                 patch(p, off, new)
         print(f"{a[0]} {a[1]}: done")

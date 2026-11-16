@@ -11,6 +11,7 @@ auto/floor_emmc_art.py (write: the big ones, icons: the small ones) and are neve
 Emulator tests: test_focus_emmc.py, test_block_icons.py.
 """
 import os
+import re
 import struct
 
 ENABLED = os.environ.get("NAM_EMMC_ART") == "1"
@@ -20,8 +21,10 @@ SEG1 = (0x10088A30, 0x3008)                 # segment 1: destination, stock leng
 VA = SEG1[0] + SEG1[1]
 FOCUS_IMG = bytes.fromhex("e0b58ab0")       # focus_img's first two instructions: push {r5-r7, lr}; sub sp, #0x28
 SITE = bytes.fromhex("9b780bb1")            # ldrb r3, [r3, #2]; cbz r3, +6: Focus View's test at the end of dm_paint
+PAINT_CALL = re.compile(rb"\xdf\xf8.[\x30-\x3f]\x98\x47\x20\x90\x00\x26", re.S)  # ldr.w r3, [pc, #x]; blx r3; str r0, [sp, #0x80]; movs r6, #0
 END = 0x10092000
 HOOK, IMG, LIT = 0x000, 0x540, 0x800        # fe_hook, fe_img and the literals in the module (m4/focus_emmc.s .org's)
+PRE, PRE_RET = 0xA00, 0x9F0                 # fe_pre (Focus View's exit cleanup) and the word holding its return address
 
 
 def load():
@@ -66,6 +69,21 @@ def hook_site(meter_code):
     return k - 4
 
 
+def pre_site(meter_va, meter_code):
+    """Offset of dm_paint's stock-paint call (ldr.w r3, [pc, #x]; blx r3; str r0, [sp, #0x80]) that fe_pre takes over: its first eight
+    bytes are replaced by a jump, which needs them word aligned on the unit."""
+    found = list(PAINT_CALL.finditer(meter_code))
+    assert len(found) == 1, "dm_paint's stock-paint call not found once in the meter module"
+    off = found[0].start()
+    assert (meter_va + off) % 4 == 0, f"the stock-paint call is not word aligned ({meter_va + off:#x})"
+    return off
+
+
+def pre_ret(meter_va, meter_code):
+    """Where fe_pre goes on: the `movs r6, #0` after the eight replaced bytes (Thumb bit set)."""
+    return meter_va + pre_site(meter_va, meter_code) + 8 + 1
+
+
 def patches(meter_va, meter_code, va=VA):
     """({offset in the meter module: bytes}, the meter's focus_fill): the jump over focus_img to fe_img, and at the end of
     dm_paint `mov r0, r5; mov r1, r4; bl fe_hook; nop; nop` over the Focus View lines."""
@@ -75,13 +93,15 @@ def patches(meter_va, meter_code, va=VA):
     assert img > 0 and meter_code.find(FOCUS_IMG, img + 1) < 0, "focus_img not found once in the meter module"
     hook = b"\x28\x46\x21\x46" + encode_bl(meter_va + site + 4, va + HOOK) + b"\x00\xbf\x00\xbf"
     assert len(hook) == 12
-    return {img: jump(meter_va + img, va), site: hook}, focus_fill
+    pre = b"\xdf\xf8\x00\xf0" + struct.pack("<I", (va + PRE) | 1)
+    return {img: jump(meter_va + img, va), site: hook, pre_site(meter_va, meter_code): pre}, focus_fill
 
 
-def with_literals(code, dm_cfg, focus_fill):
-    """The module with the meter's dm_cfg and focus_fill (Thumb bit set) in its literals."""
+def with_literals(code, dm_cfg, focus_fill, ret=0):
+    """The module with the meter's dm_cfg and focus_fill (Thumb bit set) in its literals, and fe_pre's return address (pre_ret)."""
     out = bytearray(code)
     struct.pack_into("<3I", out, LIT, dm_cfg, focus_fill | 1, 0)
+    struct.pack_into("<I", out, PRE_RET, ret)
     return bytes(out)
 
 

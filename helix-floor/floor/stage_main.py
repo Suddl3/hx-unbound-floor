@@ -294,12 +294,14 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
     if focus_emmc.ENABLED:                             # NAM_EMMC_ART=1: Focus View's pictures from the eMMC store
         assert meter, "NAM_EMMC_ART needs NAM_DSP_METER"
         mpatch, focus_fill = focus_emmc.patches(meter[0], meter[1])
+        pre_ret = focus_emmc.pre_ret(meter[0], meter[1])     # before the module is patched: it finds dm_paint's stock-paint call
         dpatched = bytearray(meter[1])
         for off, jb in mpatch.items():
             cave[meter[0] - CAVE + off:meter[0] - CAVE + off + len(jb)] = jb
             dpatched[off:off + len(jb)] = jb
         meter = (meter[0], bytes(dpatched), meter[2])   # verify() reads the module back with the patches in
-        fe = (focus_emmc.with_literals(focus_emmc.load(), meter[0] + meter[2]["dm_cfg"], focus_fill),
+        fe = (focus_emmc.with_literals(focus_emmc.load(), meter[0] + meter[2]["dm_cfg"], focus_fill,
+                                       pre_ret),
               [(meter[0] + off, jb) for off, jb in mpatch.items()])
     # pointers and counts (all in seg2: the file offsets don't move with seg0's growth... they do,
     # so everything is written before the cave is spliced in)

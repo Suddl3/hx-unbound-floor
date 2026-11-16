@@ -63,7 +63,7 @@ def main():
                 sys.exit("already installed")
             assert have == module_bytes(), f"the module on the unit is not the one this tool expects: {have.hex()} vs {module_bytes().hex()}"
             code = open(os.path.join(M4, "event_log.bin"), "rb").read()
-            p.write_bulk(RING, bytes(16 + 64 * 16))
+            p.write_bulk(RING, bytes(16 + 32 * 32))
             p.write_bulk(STUB, code)
             pk = floor_peek.Peek(p.ctl)
             try:
@@ -76,21 +76,22 @@ def main():
             p.patch_atomic(patch_addr(), module_bytes())
             print("original bytes restored")
         elif a[0] == "clear":
-            p.write_bulk(RING, bytes(16 + 64 * 16))
+            p.write_bulk(RING, bytes(16 + 32 * 32))
             print("cleared")
         else:
             pk = floor_peek.Peek(p.ctl)
             try:
-                d = pk.read(RING, 16 + 64 * 16)
+                d = pk.read(RING, 16 + 32 * 32)
             finally:
                 pk.close()
             head = struct.unpack_from("<I", d, 0)[0]
             names = {1: "press", 2: "release", 3: "release-before-hold", 5: "hold"}
-            first = max(0, head - 64)
+            first = max(0, head - 32)
             print(f"{head} key events logged")
             for n in range(first, head):
-                cls, code, _, val, cfg, hv = struct.unpack_from("<BBHiII", d, 16 + 16 * (n % 64))
-                print(f"{n:4d}: key {code:3d}  value {val} ({names.get(val, '?'):19s})  focus {cfg >> 16 & 255} flags {cfg >> 24:#x}  home view {hv}")
+                cls, code, _, val, cfg, hv, tick, task, kb = struct.unpack_from("<BBHiIIIII", d, 16 + 32 * (n % 32))
+                print(f"{n:4d}: key {code:3d}  value {val} ({names.get(val, '?'):19s})  focus {cfg >> 16 & 255} flags {cfg >> 24:#x}  "
+                      f"home view {hv}  tick {tick}  task {task}  down bits {kb:#x}")
 
 
 if __name__ == "__main__":
