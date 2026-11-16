@@ -11,7 +11,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CODE = focus_emmc.with_literals(focus_emmc.load(), 0x1001FE00, 0x1001FC46)
 BASE, FB, VIEW, TBL, STORE = focus_emmc.VA, 0x285A3F50, 0x20004000, 0x29A00000, 0x440000
 CFG = 0x1001FE00
-STUBS = {0x2813AAB8: "param", 0x28155F34: "memset", 0x28114A1C: "obj", 0x28148CCC: "desc", 0x1000504C: "read", 0x1001FC46: "focus_fill"}
+STUBS = {0x2813AAB8: "param", 0x28155F34: "memset", 0x28114A1C: "obj", 0x28148CCC: "desc", 0x1000504C: "read", 0x281043E8: "sel", 0x1001FC46: "focus_fill"}
 S, NIDS, NPIC = 6, 400, 4                 # 6 x 6 pictures (the real ones are 36 x 36), 4 pictures
 SPP = (S * S * 2 + 511) // 512
 HDR_SEC = 10
@@ -58,7 +58,9 @@ def machine(store=True, hs=S, hnpic=NPIC, hspp=SPP):     # hs / hnpic / hspp: wh
             return
         assert mu.reg_read(UC_ARM_REG_SP) % 8 == 0, name
         st["calls"].append(name)
-        if name == "obj":
+        if name == "sel":
+            mu.reg_write(UC_ARM_REG_R0, st["sel"])
+        elif name == "obj":
             mu.reg_write(UC_ARM_REG_R0, 0x20006000)
         elif name == "desc":
             bid, d = mu.reg_read(UC_ARM_REG_R1), mu.reg_read(UC_ARM_REG_R2)
@@ -88,6 +90,7 @@ def machine(store=True, hs=S, hnpic=NPIC, hspp=SPP):     # hs / hnpic / hspp: wh
             assert mu.reg_read(UC_ARM_REG_R4) == FB
 
     st["asked"] = []
+    st["sel"] = 0                                          # the model's selected block id (SEL_BLOCK)
     st["frames"] = []
     mu.hook_add(UC_HOOK_CODE, hook)
     mu.mem_write(CFG + 2, b"\x00")
@@ -183,6 +186,7 @@ def px(fb, x, y):
 
 
 st["frames"] = [(103, 126, 16), (188, 126, 16), (103, 270, 8), (700, 400, 31)]
+st["sel"] = 38
 fb = run()
 assert px(fb, 103 - 24, 126) == (28, 4, 2) and px(fb, 103, 126 - 24) == (28, 4, 2)       # an enabled frame (grey 16): the whole category colour
 assert px(fb, 103 + 23, 126 + 23) == (28, 4, 2) and px(fb, 103 - 22, 126 + 22) == (28, 4, 2)
@@ -214,6 +218,13 @@ assert px(fb, X0 + 53, Y0 + 20) == (0, 0, 0) and px(fb, X0 + 52, Y0 + 20) == (0,
 fb = run(keep=True)                                       # and a further paint changes nothing (the slot is clean)
 assert all(px(fb, X0 + k, Y0) == (0, 0, 0) for k in range(0, 54))
 st["ids"] = ids_keep
+# the stock hides its outline on a Home press (the selected frame is a plain grey 16): the model still says block 38 is selected,
+# so the white border stays, and a frame at grey 31 that is not the selected id gets none
+st["frames"] = [(103, 126, 16), (188, 126, 31), (103, 270, 8), (700, 400, 16)]
+fb = run()
+assert all(px(fb, X0 + k, Y0) == W for k in range(6, 48)), "the border must follow the model's selection, not the stock outline"
+assert all(px(fb, 188 - 27 + k, 126 - 27) == (0, 0, 0) for k in range(0, 54)), "grey 31 on a block the model has not selected"
+st["frames"] = [(103, 126, 16), (188, 126, 16), (103, 270, 8), (700, 400, 31)]
 fb = run()
 # enabled blocks' pictures are at full brightness (selected or not), bypassed ones at half
 drawn(fb, 700, 400, 0x10)
