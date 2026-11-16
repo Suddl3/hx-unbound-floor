@@ -18,7 +18,6 @@
 .equ REDRAW, 0x2808a0ad
 .equ LAYER_H, 0x280b1741            @ list A's active node: the layer under the views (title bar, parameter panel)
 .equ LAYER_D, 0x28185254
-.equ REFRESH, 0x280d5ef5
 .equ HANDLER, 0x280d735d             @ the home view's show / hide handler (r0 = 0, r1 = show, r2 = the view)
 .thumb_func
 dm_event2:                          @ r0 the event: u8 class, u8 code, u16 0, u32 value
@@ -63,7 +62,7 @@ rel:
     bic r1, r1, #1                  @ the release: ask the render loop for a redraw of everything
     strb r1, [r3, #3]
     sub sp, #8
-    ldr r6, =HANDLER                @ hide and show the home view: every widget built again (the selection outline comes back)
+    ldr r6, =HANDLER                @ hide and show the home view: every widget built again, as when the UI comes back from another screen
     ldr r2, =HOME_VIEW
     movs r0, #0
     movs r1, #0
@@ -72,9 +71,15 @@ rel:
     movs r0, #0
     movs r1, #1
     blx r6
-    ldr r0, =HOME_VIEW              @ then the view's refresh: texts and the parameter panel from the model
-    ldr r3, =REFRESH
-    blx r3
+    ldr r6, =LAYER_H                @ then the layer under the views (title bar, parameter panel)
+    ldr r2, =LAYER_D
+    movs r0, #0
+    movs r1, #0
+    blx r6
+    ldr r2, =LAYER_D
+    movs r0, #0
+    movs r1, #1
+    blx r6
     ldr r3, =REDRAW
     blx r3
     add sp, #8

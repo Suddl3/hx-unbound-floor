@@ -6,6 +6,7 @@ running on the unit. Each patch checks the unit's bytes against the build's modu
   floor_homefix.py rt on|off      the gear-menu repaint round trip at Home's release (module + 1440, a `beq de_go` made `b de_go`
                                   when "off" = no round trip)
   floor_homefix.py knob on|off    the round trip replaced by one do-nothing knob event (m4/rt_knob.bin), same site as `delay`
+  floor_homefix.py stockhome on|off  Home never flips Focus View: the press goes straight to the stock (to see what the stock does alone)
   floor_homefix.py swallow on|off dm_event rewritten (m4/dm_event2.bin): Home flips Focus View, the stock never sees the press; redraw requested directly
   floor_homefix.py refresh on|off the round trip replaced by a direct call of the home view's refresh 0x280d5ef4 (m4/rt_refresh.bin), same site
   floor_homefix.py inval on|off   the round trip replaced by the render loop's own redraw request 0x2808a0ac (m4/rt_inval.bin), same site
@@ -78,7 +79,7 @@ def patch(p, off, new16, stub=None):
 
 def main():
     a = sys.argv[1:]
-    if len(a) != 2 or a[0] not in ("pre", "rt", "delay", "knob", "inval", "refresh", "swallow") or a[1] not in ("on", "off"):
+    if len(a) != 2 or a[0] not in ("pre", "rt", "delay", "knob", "inval", "refresh", "swallow", "stockhome") or a[1] not in ("on", "off"):
         sys.exit(__doc__)
     m = module()
     on = a[1] == "on"
@@ -90,6 +91,14 @@ def main():
             jump = b"\xdf\xf8\x00\xf0" + struct.pack("<I", stub | 1) + m[off + 8:off + 16]
             if on:
                 patch(p, off, jump, ("fe_pre.bin", stub))
+            else:
+                apply(p, base() + off, m[off:off + 16])
+        elif a[0] == "stockhome":        # Home never flips Focus View: the press goes straight to the stock (to see what the stock itself does)
+            off = 1400                   # cmp r2, #1; bne de_go (1402) -> cmp r2, #1; b de_go
+            assert m[off + 2:off + 4] != bytes([0x30, 0xE0])
+            new = m[off:off + 2] + bytes([0x30, 0xE0]) + m[off + 4:off + 16]
+            if on:
+                patch(p, off, new)
             else:
                 apply(p, base() + off, m[off:off + 16])
         elif a[0] == "swallow":          # dm_event's first instructions -> m4/dm_event2.bin (the whole of dm_event rewritten)
