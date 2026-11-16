@@ -99,11 +99,12 @@ def machine(store=True, hs=S, hnpic=NPIC, hspp=SPP):     # hs / hnpic / hspp: wh
         mu.mem_write(a + 0xC, struct.pack("<4I", x, y, w, h))
         mu.mem_write(a + 0x1C, bytes([anchor, visible]))
 
-    def run(focus=0):
+    def run(focus=0, keep=False):                         # keep: the frame buffer as the last paint left it (the stock paint draws nothing new)
         mu.mem_write(CFG + 2, bytes([focus]))
         st["calls"].clear(); st["reads"].clear(); st["asked"].clear()
-        mu.mem_write(FB, bytes(800 * 480 * 2))
-        for cx, cy, grey in st["frames"]:                 # a stock frame: a 2 pixel outline of this grey (5 bits), black inside
+        if not keep:
+            mu.mem_write(FB, bytes(800 * 480 * 2))
+        for cx, cy, grey in ([] if keep else st["frames"]):                 # a stock frame: a 2 pixel outline of this grey (5 bits), black inside
             for y in range(48):
                 for x in range(48):
                     if x < 2 or x >= 46 or y < 2 or y >= 46:
@@ -202,6 +203,18 @@ assert px(fb, 103 - 27, 126 - 27) == (0, 0, 0) and px(fb, 103 + 26, 126 + 26) ==
 assert all(px(fb, 103 + dx, 126) == (16, 16, 16) for dx in (-27, -26, -25, 24, 25, 26))     # wiped, the stub's grey (0x4210) back
 assert px(fb, 103 - 20, 126) == (0, 0, 0)                                               # outside the outline band: nothing
 assert px(fb, 103 - 3, 126 - 3) != (28, 4, 2)                                           # the blanked square / picture inside
+# a border does not stay behind: the same frame buffer painted again with the block gone (a new preset, a moved or deleted block)
+# has the white border and its gap wiped, and the path line's stubs back
+ids_keep = dict(st["ids"])
+st["ids"] = {}
+fb = run(keep=True)
+assert all(px(fb, X0 + k, Y0) == (0, 0, 0) for k in range(0, 54)), "the selected frame's top border row is still there"
+assert all(px(fb, X0, Y0 + k) == (0, 0, 0) and px(fb, X0 + 1, Y0 + k) == (0, 0, 0) for k in range(0, 54) if not 25 <= k <= 28)
+assert px(fb, X0 + 53, Y0 + 20) == (0, 0, 0) and px(fb, X0 + 52, Y0 + 20) == (0, 0, 0)
+fb = run(keep=True)                                       # and a further paint changes nothing (the slot is clean)
+assert all(px(fb, X0 + k, Y0) == (0, 0, 0) for k in range(0, 54))
+st["ids"] = ids_keep
+fb = run()
 # enabled blocks' pictures are at full brightness (selected or not), bypassed ones at half
 drawn(fb, 700, 400, 0x10)
 drawn(fb, 103, 126, 0x30)
@@ -209,13 +222,13 @@ drawn(fb, 188, 126, 0x20, dim=(1, 0x3DEF))
 fb2 = run()
 assert fb2 == fb and st["reads"] == []
 # the tuning words: a selected (white) frame goes toward the category colour with sel_mix, the dimming follows dim_shift / dim_mask
-mu.mem_write(BASE + 0x514, struct.pack("<2I", 2, 0x1CE7))           # the "not selected, bypassed" pair: three quarters
+mu.mem_write(BASE + focus_emmc.LIT + 0x14, struct.pack("<2I", 2, 0x1CE7))           # the "not selected, bypassed" pair: three quarters
 fb4 = run()
 want = struct.unpack("<H", bytes([0x20, 0x41]))[0]
 src = struct.unpack("<H", bytes([0x20, 0x40]))[0]
 got = struct.unpack("<H", fb4[((126 - S // 2) * 800 + 188 - S // 2) * 2:][:2])[0]
 assert got == src - ((src >> 2) & 0x1CE7), (hex(got), hex(src))
-mu.mem_write(BASE + 0x514, struct.pack("<2I", 1, 0x3DEF))
+mu.mem_write(BASE + focus_emmc.LIT + 0x14, struct.pack("<2I", 1, 0x3DEF))
 # a square larger than the picture is blanked first (the stock icon under it): stock pixels in the 8 x 8 are gone
 mu.mem_write(FB, b"\xff" * (800 * 480 * 2))
 mu.reg_write(UC_ARM_REG_R0, VIEW); mu.reg_write(UC_ARM_REG_R1, FB)

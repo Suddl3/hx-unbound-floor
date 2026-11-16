@@ -133,7 +133,8 @@ fh_go:
     ldr r6, =TBL
     movs r7, #0                     @ i: 16 path + slot
 fh_loop:
-    lsrs r0, r7, #4
+    bl fe_old                       @ first take away the white border this slot had in this frame buffer last time (a block gone, moved or
+    lsrs r0, r7, #4                 @ not selected any more, a new preset): the stock paint does not clean outside a block's own image
     mov.w r1, #0x4c0
     mul r0, r0, r1
     and r1, r7, #15
@@ -254,6 +255,10 @@ fh_pic:
     movlo r1, #0
     str r1, [sp, #0x40]             @ 1: the selected block
     str r0, [sp, #0x60]
+    cbz r1, fh_nosel
+    bl fe_fbrow
+    str r0, [r2, r7, lsl #2]        @ remember where this slot's border is drawn (cleared by fe_old at the next paint)
+fh_nosel:
     ldr r1, [sp, #0x3c]
     cbz r1, fh_noring               @ no category colour: the frame stays as it is
     bl fh_ring                      @ the frame's outline in the category colour
@@ -532,15 +537,6 @@ fo_tab:
 
 .equ MEMSET_, 0
 .ltorg
-.org 0x500
-dm_cfg_p:
-    .word 0                         @ the meter's dm_cfg (the build / the host fills it)
-    .word 0                         @ the meter's focus_fill, Thumb bit set
-    .word 0                         @ fi_state
-    .word 0, 0                      @ dim (shift, mask) of the art, by state (poked live to tune): enabled: full
-    .word 1, 0x3def                 @ bypassed, not selected: half
-    .word 0, 0                      @ on, selected: full
-    .word 1, 0x3def                 @ bypassed, selected: half
 .org 0x540
 .thumb_func
 fe_img:                             @ r4 the frame
@@ -735,8 +731,57 @@ fb_copy:
 fb_out:
     pop {r5-r9, pc}
 
+@ fe_row: r4 the frame -> r2 its row of 32 words (one per path + slot): the first pixel of the frame whose white border is drawn there, 0 none.
+@ Two frame buffers are drawn in turn and each keeps its own pixels, so each has a row (found by its address, taken on first sight).
+fe_fbrow:
+    push {r3, lr}
+    adr.w r2, fe_fbs
+    ldr r3, [r2]
+    cmp r3, r4
+    beq fr_a
+    ldr r3, [r2, #4]
+    cmp r3, r4
+    beq fr_b
+    ldr r3, [r2]
+    cbnz r3, fr_new_b
+    str r4, [r2]
+    b fr_a
+fr_new_b:
+    str r4, [r2, #4]
+fr_b:
+    adr.w r2, fe_rows
+    add.w r2, r2, #128
+    pop {r3, pc}
+fr_a:
+    adr.w r2, fe_rows
+    pop {r3, pc}
+
+fe_old:                             @ r7 the slot, r4 the frame: wipe the border this slot has in this buffer (fh_outer, not selected)
+    push {r0-r3, lr}
+    bl fe_fbrow
+    ldr r0, [r2, r7, lsl #2]
+    cbz r0, fo_none
+    movs r1, #0
+    str r1, [r2, r7, lsl #2]
+    bl fh_outer
+fo_none:
+    pop {r0-r3, pc}
+
 .ltorg
+.org 0x800                          @ (focus_emmc.py LIT: the code before fe_img outgrew 0x500)
+dm_cfg_p:
+    .word 0                         @ the meter's dm_cfg (the build / the host fills it)
+    .word 0                         @ the meter's focus_fill, Thumb bit set
+    .word 0                         @ fi_state
+    .word 0, 0                      @ dim (shift, mask) of the art, by state (poked live to tune): enabled: full
+    .word 1, 0x3def                 @ bypassed, not selected: half
+    .word 0, 0                      @ on, selected: full
+    .word 1, 0x3def                 @ bypassed, selected: half
 .balign 4
+fe_fbs:
+    .word 0, 0                      @ the two frame buffers seen
+fe_rows:
+    .space 256                      @ 2 x 32 words
 fe_state:
     .word 0                         @ 0 header not read yet, 1 ready, 2 no store
 fe_cached:
