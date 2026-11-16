@@ -6,6 +6,7 @@ running on the unit. Each patch checks the unit's bytes against the build's modu
   floor_homefix.py rt on|off      the gear-menu repaint round trip at Home's release (module + 1440, a `beq de_go` made `b de_go`
                                   when "off" = no round trip)
   floor_homefix.py knob on|off    the round trip replaced by one do-nothing knob event (m4/rt_knob.bin), same site as `delay`
+  floor_homefix.py refresh on|off the round trip replaced by a direct call of the home view's refresh 0x280d5ef4 (m4/rt_refresh.bin), same site
   floor_homefix.py inval on|off   the round trip replaced by the render loop's own redraw request 0x2808a0ac (m4/rt_inval.bin), same site
   floor_homefix.py delay on|off   the earlier experiment (m4/rt_delay.bin: the round trip with a pause), jump at module + 1444
 """
@@ -76,7 +77,7 @@ def patch(p, off, new16, stub=None):
 
 def main():
     a = sys.argv[1:]
-    if len(a) != 2 or a[0] not in ("pre", "rt", "delay", "knob", "inval") or a[1] not in ("on", "off"):
+    if len(a) != 2 or a[0] not in ("pre", "rt", "delay", "knob", "inval", "refresh") or a[1] not in ("on", "off"):
         sys.exit(__doc__)
     m = module()
     on = a[1] == "on"
@@ -90,12 +91,12 @@ def main():
                 patch(p, off, jump, ("fe_pre.bin", stub))
             else:
                 apply(p, base() + off, m[off:off + 16])
-        elif a[0] in ("delay", "knob", "inval"):
+        elif a[0] in ("delay", "knob", "inval", "refresh"):
             off = 1444
             stub = 0x29F07400
             jump = b"\xdf\xf8\x00\xf0" + struct.pack("<I", stub | 1) + m[off + 8:off + 16]
             if on:
-                patch(p, off, jump, ({"delay": "rt_delay.bin", "knob": "rt_knob.bin", "inval": "rt_inval.bin"}[a[0]], stub))
+                patch(p, off, jump, ({"delay": "rt_delay.bin", "knob": "rt_knob.bin", "inval": "rt_inval.bin", "refresh": "rt_refresh.bin"}[a[0]], stub))
             else:
                 apply(p, base() + off, m[off:off + 16])
         else:                           # rt: "on" = the stock behaviour (round trip), "off" = no round trip
