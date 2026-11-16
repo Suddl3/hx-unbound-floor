@@ -73,8 +73,26 @@ def build(size, scenes=None, assign=None, theme=None):
         mp = base
         pics = [rgb555(art_map.open_picture(p), size) for p in m["pictures"]]
     spp = (size * size * 2 + 511) // 512
+    nam = b""
+    if os.environ.get("NAM_ICON_PIX") and NAM_ICONS:     # each NAM capture's own big picture (m4/focus_emmc.s fe_img, FNAM_*)
+        from PIL import Image
+        by_slot, folder = nam_slot_icons()
+        slot = slots_a[NAM_PID] if scenes and NAM_PID < n else None
+        at = {}
+        for ident in sorted(set(by_slot.values())):
+            img = Image.open(os.path.join(folder, ident + ".png"))
+            at[ident] = len(pics)
+            pics.append(rgb555(img, size) if slot is None else bg_store.composite(scn[slot], img, size))
+        tab = [0xFFFF] * 128
+        for sl, ident in by_slot.items():
+            tab[sl - 1] = at[ident]
+        nam = struct.pack("<H", NAM_PID + 1) + bytes(6) + struct.pack("<128H", *tab)    # at 1784 (u16 pid + 1) and 1792 (table)
+        print(f"{len(at)} NAM capture pictures for {len(by_slot)} capture slots")
     hdr = MAGIC + struct.pack("<HH", 1, len(pics)) + bytes(8)
     hdr += struct.pack("<HHI", size, n, STORE + HDR_SECTORS) + struct.pack(f"<{n}H", *mp)
+    if nam:
+        assert len(hdr) <= 1784
+        hdr += bytes(1784 - len(hdr)) + nam
     assert len(hdr) <= (bg_store.BG_HDR if bgs else HDR_SECTORS * 512)
     if bgs:
         hdr += bytes(bg_store.BG_HDR - len(hdr)) + bg_store.section(slots_a, len(bgs), bg_store.BG_STORE, 0, map_b, slots_b)
@@ -171,6 +189,10 @@ NAM_PID = 380                   # the NAM A2 Lite block's preset id on this firm
 NAM_ICONS = os.environ.get("NAM_CAPTURE_ICONS", "")   # a clone of Suddl3/hx-edit-unbound (formerly hx-edit-nam)
 
 
+# NAM_ICON_PIX: a folder of the pictures themselves instead of nam_capture_icons/ (e.g. the 256/ folder of Suddl3's nam-gear-art.zip,
+# release gear-art-2026-11-16; same ids as the file names there). The picking rules still come from NAM_CAPTURE_ICONS.
+
+
 def editor_code(folder):
     """Where capture_icons.py and nam_capture_icons/ are in a clone of HX Edit Unbound: src/ since 2026-11-16 (the root
     before), so a clone's root or its src/ both work."""
@@ -189,7 +211,7 @@ def nam_slot_icons():
     import capture_icons
     mem = os.path.join(os.environ["LOCALAPPDATA"], "HX Edit NAM", "NAM Library", "floor-memory.json")
     slots = json.load(open(mem, encoding="utf-8")).get("slots", {})
-    return {int(k): capture_icons.pick(v.get("name", "")) for k, v in slots.items() if 1 <= int(k) <= 128},         os.path.join(code, "nam_capture_icons")
+    return {int(k): capture_icons.pick(v.get("name", "")) for k, v in slots.items() if 1 <= int(k) <= 128},         os.environ.get("NAM_ICON_PIX") or os.path.join(code, "nam_capture_icons")
 
 
 ICON_MAX_SIZE = 44              # the frame's inside (m4/focus_emmc.s: the firmware refuses anything else)
