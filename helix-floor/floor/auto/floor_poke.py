@@ -72,6 +72,11 @@ class Poke:
         finally:
             ed.seq = keep
 
+    @staticmethod
+    def check(addr, n):
+        """The whole write addr .. addr + n must lie in one RAM range (the pointer steps on after every byte)."""
+        assert n > 0 and any(lo <= addr and addr + n <= hi for lo, hi in RAM), f"{addr:#x} + {n}: not inside one RAM range: refused"
+
     def at(self, addr):
         # RAM only: local SRAM, AHB SRAM, SDRAM. Never the peripherals or the system space (clocks, power, thermal:
         # the hardware must not be reconfigured or overheated by an experiment)
@@ -80,6 +85,7 @@ class Poke:
             self._send(0xC000 | (addr >> sh) & 0x3FFF)
 
     def write(self, addr, data):
+        self.check(addr, len(data))
         self.at(addr)
         for b in data:
             self._send(0x8000 | b)
@@ -127,6 +133,7 @@ class Poke:
     def write_bulk(self, addr, data, chunk=BULK_CHUNK):
         """Write data at addr, chunk bytes a request (enable_bulk first)."""
         assert 32 <= chunk <= BULK_CHUNK, chunk     # under 32 msgpack makes a fixstr (not copied); a request is 512 B at most
+        self.check(addr, len(data))
         self.at(addr)
         ed = self.ctl.ed
         keep = ed.seq

@@ -17,6 +17,7 @@ READ = 0x1000504D               # (buffer, sector, count) -> 0 or < 0
 STUB = 0x29F02000
 BUF = 0x29F40000                # a peek window (128 KB aligned) in free SDRAM
 RESULT = STUB + 0x40
+PENDING = 0x7FFFFFFF            # the result word before the call: still this afterwards = the stub did not run
 MAX = 1280                      # one peek window's useful part (655,360 bytes)
 
 
@@ -39,12 +40,22 @@ def write(p, sector, data):
     code = bytearray(stub(sector, count))
     struct.pack_into("<I", code, 24 + 12, WRITE)
     p.write_bulk(STUB, bytes(code))
+    p.write(RESULT, struct.pack("<I", PENDING))
+    pk = floor_peek.Peek(p.ctl)                  # the stub as it stands in RAM, and the data, before anything is written to the card
+    try:
+        w = pk.window(0x29F00000)
+        assert w[STUB - 0x29F00000:][:len(code)] == bytes(code), "the write stub did not arrive intact: nothing written"
+        assert pk.window(BUF)[:len(data)] == data, "the data did not arrive intact: nothing written"
+    finally:
+        pk.close()
     p.call(STUB)
     pk = floor_peek.Peek(p.ctl)
     try:
         res = struct.unpack_from("<i", pk.window(0x29F00000), RESULT - 0x29F00000)[0]
     finally:
         pk.close()
+    if res == PENDING:
+        raise SystemExit(f"write {sector:#x} x {count}: the stub did not run (no result)")
     if res < 0:
         raise SystemExit(f"write {sector:#x} x {count}: error {res}")
 
@@ -53,6 +64,7 @@ def read(p, sector, count):
     """p: a floor_poke.Poke with the bulk write enabled."""
     assert 0 < count <= MAX
     p.write_bulk(STUB, stub(sector, count))
+    p.write(RESULT, struct.pack("<I", PENDING))
     p.call(STUB)
     pk = floor_peek.Peek(p.ctl)         # one USB session for both (many in a row once left the unit deaf to the PC)
     try:
@@ -60,6 +72,8 @@ def read(p, sector, count):
         data = pk.window(BUF)[:count * 512]
     finally:
         pk.close()
+    if res == PENDING:
+        raise SystemExit(f"read {sector:#x} x {count}: the stub did not run (no result)")
     if res < 0:
         raise SystemExit(f"read {sector:#x} x {count}: error {res}")
     return data

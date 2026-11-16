@@ -101,6 +101,9 @@ def write(size, scenes=None, assign=None, theme=None):
     t = time.time()
     with floor_poke.Poke() as p:
         p.enable_bulk()
+        probe = floor_emmc.read(p, STORE, 1) + floor_emmc.read(p, STORE + HDR_SECTORS + total, 8)      # a store of ours, or blank
+        if any(probe) and probe[:4] != MAGIC:
+            raise SystemExit("the picture store's sectors are not blank and hold no picture store: refusing to write over them")
         step = floor_emmc.MAX // spp * spp * 512
         for off in range(0, len(data), step):
             floor_emmc.write(p, STORE + HDR_SECTORS + off // 512, data[off:off + step])
