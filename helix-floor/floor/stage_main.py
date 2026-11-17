@@ -29,6 +29,7 @@ import screen_mirror  # noqa: E402
 import dsp_meter  # noqa: E402
 import focus_emmc  # noqa: E402
 import clk_stop  # noqa: E402
+import nam_pedal  # noqa: E402
 
 E_MAIN, E_COPY, E_DB = 0, 1, 4
 TAB1_BASE_PTRS = (0x28134D70, 0x28134DBC, 0x28134DD4, 0x28134EC8, 0x28134F80)
@@ -47,6 +48,10 @@ SEG0 = (0x10000000, 0x11870)
 # needs, and admits ~3,700 units of effects beside one. Floor calibration still to measure.
 DSP_COST = int(os.environ.get("NAM_DSP_COST", "3600"))   # 11-07: measured ~35% a call on the unit (meter 52.8K of ~150K cycles)
 NAME, DISPLAY, SHORT, FOLDER = 'HD2_AmpNAMLite', 'NAM A2 Lite', 'NAM A2 Lite', (12, 'NAM')
+# NAM_PEDAL=1 (nam_pedal.py): a second model, 'NAM Pedal', beside the NAM block (stage_model adds both). Its
+# cost is a start value (~7.7% of a DSP on the LT meter, 850 at ~100 units a 1%): measure on the unit.
+PEDAL = nam_pedal.PEDAL
+PEDAL_NAME, PEDAL_DISPLAY, PEDAL_COST, PEDAL_PID = 'HD2_AmpNAMPedal', 'NAM Pedal', int(os.environ.get("NAM_PEDAL_COST", "850")), 768
 E555 = bool(os.environ.get("NAM_555"))     # EXPERIMENT build/EXPERIMENT-555: preset id 555, a Distortion-type item
 XENO, XENO_PID = 'HD2_DistXenomorphFuzzMono', 555
 # 555 variants (stock never pairs browser btype 1 with Table 2 class 2/3; hybrid did, and the unit dropped it):
@@ -91,7 +96,7 @@ class Image:
         return struct.unpack('<I', self.rd(va, 4))[0]
 
 
-def tables(im, src_ni, new_ni, n_params, xeno_ni=None):
+def tables(im, src_ni, new_ni, n_params, xeno_ni=None, ped_ni=None):
     """The new Table 1, Table 2 and browser lists (upstream add_model_entry0's steps 1-3)."""
     log = []
     tab1 = im.u32(TAB1_BASE_PTRS[0])
@@ -112,6 +117,15 @@ def tables(im, src_ni, new_ni, n_params, xeno_ni=None):
         pid = XENO_PID
         n1 -= 1
     t1 += struct.pack('<IHHI', new_ni, pid, 0, DSP_COST)
+    pids = [pid]
+    if ped_ni is not None:                    # NAM Pedal: preset id 768 (a Thumb-2 immediate) if free, else the next valid one
+        assert not E555
+        okp = [p for p in free[1:] if p < 256 or pa._thumb_modimm(p) is not None]
+        ppid = PEDAL_PID if PEDAL_PID in free else okp[0]
+        t1 += struct.pack('<IHHI', ped_ni, ppid, 0, PEDAL_COST)
+        pids.append(ppid)
+        n1 += 1
+        log.append(f"Table 1: NAM Pedal preset id {ppid}, DSP cost {PEDAL_COST}")
     log.append(f"Table 1: {n1} -> {n1 + 1} rows; NAM preset id {pid} (free: {free[:8]}...), DSP cost {DSP_COST} "
                f"(Clarity {src[3]})")
     tab2 = im.u32(TAB2_BASE_PTR)
@@ -126,7 +140,14 @@ def tables(im, src_ni, new_ni, n_params, xeno_ni=None):
     assert len(set(counts)) == 1
     struct.pack_into('<3I', row, 24, n_params, n_params, n_params)
     t2 += row
-    log.append(f"Table 2: {n2} -> {n2 + 1} rows (row from model {row_ni}: category {row[21]}, class {row[22]})")
+    n2x = 1
+    if ped_ni is not None:
+        prow = bytearray(row)
+        struct.pack_into('<I', prow, 0, ped_ni)
+        prow[4:20] = PEDAL_DISPLAY.encode('latin1')[:16].ljust(16, b'\0')
+        t2 += prow
+        n2x = 2
+    log.append(f"Table 2: {n2} -> {n2 + n2x} rows (row from model {row_ni}: category {row[21]}, class {row[22]})")
     dname = DISPLAY.encode('latin1')[:25].ljust(26, b'\0')
     lists, folder_item = [], None
     for idx in range(pa.E0_BLIST_SLOTS):
@@ -154,24 +175,30 @@ def tables(im, src_ni, new_ni, n_params, xeno_ni=None):
                 struct.pack_into('<IIiH', item, 0, bt, new_ni, ci, pid if ci == -1 else u12)
                 item[14:40] = dname
                 struct.pack_into('<2I', item, 40, 1, 0)
+                if ped_ni is not None:          # NAM Pedal's item beside it (its own model and preset id)
+                    pitem = bytearray(item)
+                    struct.pack_into('<IIiH', pitem, 0, bt, ped_ni, ci, pids[1] if ci == -1 else u12)
+                    pitem[14:40] = PEDAL_DISPLAY.encode('latin1')[:25].ljust(26, b'\0')
+                    item += pitem
                 break
         if item is None:
             continue
+        nit = len(item) // 48
         if idx // 4 == FOLDER[0]:
             if folder_item is None and ci == -1:
                 folder_item = bytes(item)
         else:
-            lists.append((idx, lc + 1, bytes(raw + item)))
-            log.append(f"browser list ({idx // 4},{idx % 4}): {lc} -> {lc + 1} items")
+            lists.append((idx, lc + nit, bytes(raw + item)))
+            log.append(f"browser list ({idx // 4},{idx % 4}): {lc} -> {lc + nit} items")
     cat, fname = FOLDER
     nsub = im.u32(SUBCAT_CNT + 4 * cat)
     fb = fname.encode('latin1')[:25].ljust(26, b'\0')
     assert nsub < 4 and not im.u32(BLIST_PTR_TAB + 4 * (4 * cat + nsub))
     assert not any(im.rd(SUBCAT_NAMES + 104 * cat + 26 * nsub, 26))
     assert folder_item is not None
-    lists.append((4 * cat + nsub, 1, folder_item))
-    log.append(f"new folder '{fname}' = subcategory {nsub} of category {cat}, 1 item")
-    return pid, (rd_cnt, n1 + 1, bytes(t1)), (rd2, n2 + 1, bytes(t2)), lists, (cat, nsub, fb), log
+    lists.append((4 * cat + nsub, len(folder_item) // 48, folder_item))
+    log.append(f"new folder '{fname}' = subcategory {nsub} of category {cat}, {len(folder_item) // 48} item(s)")
+    return pids, (rd_cnt, n1 + 1, bytes(t1)), (rd2, n2 + n2x, bytes(t2)), lists, (cat, nsub, fb), log
 
 
 def rename(im, names):
@@ -243,11 +270,12 @@ def cost_labels(im, t1, t2, lists):
     return f"cost labels: {n} browser items, {n2} Table 2 rows"
 
 
-def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
+def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None, ped_ni=None):
     im = Image(e0)
     name_log = rename(im, names) if names else None
     assert (im.segs[0][3], im.segs[0][2]) == SEG0, "seg0 is not the stock one"
-    pid, (rd1, c1, t1), (rd2, c2, t2), lists, (cat, nsub, fb), log = tables(im, src_ni, new_ni, n_params, xeno_ni)
+    pids, (rd1, c1, t1), (rd2, c2, t2), lists, (cat, nsub, fb), log = tables(im, src_ni, new_ni, n_params, xeno_ni, ped_ni)
+    pid = pids[0]
     if name_log:
         log.append(name_log)
     if os.environ.get("NAM_COST_LABELS") == "1":
@@ -271,7 +299,7 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
     title_base = CAVE + len(cave)
     # 555 amp: Model is knob 6, a float (ir_title knob_pids); hybrid/fx: the item is an effect, not CAT_AMP: no title
     tcode, ca, cb = (ir_title.build(title_base, [], [pid], 6) if E555 and V555 == "amp" else
-                     ir_title.build(title_base, [] if E555 else [pid]))
+                     ir_title.build(title_base, [] if E555 else pids))
     put(tcode)
     mirror = None
     if screen_mirror.ENABLED:                          # NAM_SCREEN_MIRROR=1: editor command 0x52 (screen_mirror.py)
@@ -360,15 +388,16 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
                f"{CAVE_END - CAVE - delta} bytes left); Entry 0 {len(e0):#x} -> {len(out):#x}")
     log.append(f"guards: HOOK {len(hook)} bytes at {CAVE:#x}; 0x28135070 -> ldr.w pc, [pc] ; .word {CAVE | 1:#x}")
     log.append(f"IR-name title: caves {ca:#x} / {cb:#x} ({len(tcode)} B); sites {ir_title.SITE_A:#x}, "
-               f"{ir_title.SITE_B:#x} (via relay {ir_title.RELAY:#x}) for preset id {pid}")
+               f"{ir_title.SITE_B:#x} (via relay {ir_title.RELAY:#x}) for preset ids {pids}")
     log.append(f"tables at Table 1 {a1:#x}, Table 2 {a2:#x}, lists " + ", ".join(f"({i // 4},{i % 4}) {v:#x}" for i, _, v in la))
     return out, pid, log, (a1, a2, la, ca, cb, tcode, mirror, meter, fe, ck)
 
 
-def verify(e0, src_ni, new_ni, addrs, xeno_ni=None):
+def verify(e0, src_ni, new_ni, addrs, xeno_ni=None, ped_ni=None):
     """Read the result back: segments chain, pointers and counts, the new rows, and the guard
     code in the cave run through the guard tests' interpreter."""
-    n_t1 = 823 if E555 else 824
+    n_t1 = 823 if E555 else 824 + (ped_ni is not None)
+    last_ni = ped_ni if ped_ni is not None else new_ni
     im = Image(e0)
     a1, a2, la, ca, cb, tcode, mirror, meter, fe, ck = addrs
     if fe:
@@ -392,16 +421,19 @@ def verify(e0, src_ni, new_ni, addrs, xeno_ni=None):
             assert im.rd(va, len(b)) == b, f"clock-stop site {va:#x}"
     assert all(im.u32(p) == a1 for p in TAB1_BASE_PTRS)
     assert pa._decode_thumb_movw(im.rd(TAB1_CNT_INSN, 4))[1] == n_t1 and im.u32(TAB1_END_PTR) == a1 + 12 * n_t1
-    assert im.u32(TAB2_BASE_PTR) == a2 and pa._decode_thumb_movw(im.rd(TAB2_CNT_INSN, 4))[1] == 824
-    assert struct.unpack_from('<I', im.rd(a1 + 12 * (n_t1 - 1), 12))[0] == new_ni
-    assert struct.unpack_from('<I', im.rd(a2 + 44 * 823, 44))[0] == new_ni
+    assert im.u32(TAB2_BASE_PTR) == a2 and pa._decode_thumb_movw(im.rd(TAB2_CNT_INSN, 4))[1] == 824 + (ped_ni is not None)
+    assert struct.unpack_from('<I', im.rd(a1 + 12 * (n_t1 - 1), 12))[0] == last_ni
+    assert struct.unpack_from('<I', im.rd(a2 + 44 * (823 + (ped_ni is not None)), 44))[0] == last_ni
+    if ped_ni is not None:
+        assert struct.unpack_from('<I', im.rd(a1 + 12 * (n_t1 - 2), 12))[0] == new_ni
+        assert struct.unpack_from('<I', im.rd(a2 + 44 * 823, 44))[0] == new_ni
     for idx, cnt, va in la:
         assert im.u32(BLIST_PTR_TAB + 4 * idx) == va and im.u32(BLIST_CNT_TAB + 4 * idx) == cnt
         mis = [struct.unpack_from('<I', im.rd(va + 48 * k, 48), 4)[0] for k in range(cnt)]
         if E555:                                       # (the Distortion list lost Xenomorph; NAM is in the folder)
             assert xeno_ni not in mis and (new_ni in mis or idx // 4 == 2)
         else:
-            assert mis[-1] == new_ni
+            assert mis[-1] == last_ni and (ped_ni is None or mis[-2] == new_ni)
     if E555:
         pids = [struct.unpack_from('<IHHI', im.rd(a1 + 12 * i, 12))[1] for i in range(n_t1)]
         assert pids.count(XENO_PID) == 1 and pids[-1] == XENO_PID
@@ -435,6 +467,11 @@ def main():
     nam = pa.find_model(db, NAME)
     assert nam['name'] == NAME, "run stage_model first"
     new_ni, n_params = nam['words'][2], len(nam['params'])
+    ped_ni = None
+    if PEDAL:
+        ped = pa.find_model(db, PEDAL_NAME)
+        assert ped['name'] == PEDAL_NAME, "run stage_model with NAM_PEDAL=1 first"
+        ped_ni = ped['words'][2]
     e0 = pa.get_entry_swapped(data, E_MAIN)
     assert e0 == pa.get_entry_swapped(data, E_COPY), "Entries 0 and 1 are not identical"
     xeno_ni = pa.find_model(db, XENO)['words'][2] if E555 else None
@@ -444,8 +481,8 @@ def main():
         names = {pa.find_model(db, r['internal'])['words'][2]: r['real_name']
                  for r in csv.DictReader(open(os.environ["NAM_NAMES"], encoding='utf-8'))}
         assert all(len(v) <= 16 and v.isascii() for v in names.values())
-    new0, pid, log, addrs = build_e0(e0, src_ni, new_ni, n_params, xeno_ni, names)
-    msg = verify(new0, src_ni, new_ni, addrs, xeno_ni)
+    new0, pid, log, addrs = build_e0(e0, src_ni, new_ni, n_params, xeno_ni, names, ped_ni)
+    msg = verify(new0, src_ni, new_ni, addrs, xeno_ni, ped_ni)
     # Entry 1 stays stock: on the Floor the app itself runs update mode ("Entered Update Mode!"),
     # so an untouched copy may be the way back if the patched one fails; it also shows which copy runs.
     img, _, _ = l6ia.rebuild_archive(data, {E_MAIN: new0})
