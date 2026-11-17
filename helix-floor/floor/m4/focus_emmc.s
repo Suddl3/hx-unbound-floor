@@ -26,6 +26,8 @@
 .equ BGCACHE, 0x29940000            @ one background, up to 0xc0000 B (to the icon store's RAM at TBL)
 .equ BGMAX, 0xc0000
 .equ HDR_SECS, 12                   @ header sectors read on the first call (4096 B held set A only)
+.equ FNAM_PID, 1784                @ this store's header: u16 the NAM block's preset id + 1 (0 none); +1792 u16 picture[128] by capture slot
+.equ FNAM_TAB, 1792
 .equ SETB_MAP, 3072                 @ set B (theme pack): u16 map[preset id] here, u8 slot[preset id] at SETB_SLOT (ids <= 1000)
 .equ SETB_SLOT, 5072
 .equ BG_HDR, 2048                   @ in the header read at HDR: "HXBG", u16 count, u16 sectors a background, u32 first sector,
@@ -546,8 +548,8 @@ fo_tab:
 .org 0x540
 .thumb_func
 fe_img:                             @ r4 the frame
-    push {r4-r10, lr}
-    sub sp, #0x40                   @ 32 + 64: external calls stay 8-byte aligned
+    push {r4-r11, lr}               @ r11: the selected block's id (for a NAM block's capture slot)
+    sub sp, #0x44                   @ 36 + 68: external calls stay 8-byte aligned
     adr r12, fe_state
     ldr r0, [r12]
     cmp r0, #1
@@ -576,6 +578,7 @@ fe_ready:
     ldr r3, =SEL_BLOCK
     blx r3
     mov r5, r0
+    mov r11, r0
     mov r0, sp
     movs r1, #0
     movs r2, #0x34
@@ -608,6 +611,44 @@ fe_ready:
     ldr r2, =HDR + SETB_MAP
 fe_seta:
     ldrh r9, [r2, r0, lsl #1]       @ r9 its picture
+    ldr r1, =HDR + FNAM_PID
+    ldrh r1, [r1]                   @ the NAM block's preset id + 1 (0: no NAM pictures in this store)
+    cmp r1, #0
+    beq fe_nonam
+    subs r1, r1, #1
+    cmp r1, r8
+    bne fe_nonam
+    sub sp, #0x20                   @ a NAM block: its capture's picture. knob 0 (the capture slot, 1..128), as fh_nam reads it
+    mvn r1, #1
+    str r1, [sp]
+    movs r1, #0
+    str r1, [sp, #4]
+    str r1, [sp, #8]
+    str r1, [sp, #12]
+    str r1, [sp, #16]
+    str r1, [sp, #20]
+    ldr r3, =PRESET_OBJ
+    blx r3
+    mov r1, r11
+    mov r2, sp
+    add r3, sp, #12
+    ldr lr, =PARAM_FN
+    blx lr
+    ldrb r0, [sp, #16]
+    ldr r1, [sp, #12]
+    add sp, #0x20
+    lsls r0, r0, #24
+    orr r0, r0, r1, lsr #8
+    subs r0, #1
+    cmp r0, #128
+    bhs fe_nonam
+    ldr r1, =HDR + FNAM_TAB
+    ldrh r1, [r1, r0, lsl #1]
+    movw r2, #0xffff
+    cmp r1, r2
+    it ne
+    movne r9, r1                    @ no picture for this capture: the model's own stays
+fe_nonam:
     movw r1, #0xffff
     cmp r9, r1
     beq fe_out
@@ -657,8 +698,8 @@ fe_px:
     subs r2, #1
     bne fe_row
 fe_out:
-    add sp, #0x40
-    pop {r4-r10, pc}
+    add sp, #0x44
+    pop {r4-r11, pc}
 
 @ fe_bg: r0 the preset id, r4 the frame: the background of the model's slot (sectors read into BGCACHE when the slot changes) is
 @ copied into rows y0 .. y0 + rows of the frame. Everything the header says is checked first (magic, count, slot, rows, sectors).
