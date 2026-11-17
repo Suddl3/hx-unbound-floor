@@ -29,6 +29,7 @@ import screen_mirror  # noqa: E402
 import dsp_meter  # noqa: E402
 import focus_emmc  # noqa: E402
 import clk_stop  # noqa: E402
+import unbound_info  # noqa: E402
 
 E_MAIN, E_COPY, E_DB = 0, 1, 4
 TAB1_BASE_PTRS = (0x28134D70, 0x28134DBC, 0x28134DD4, 0x28134EC8, 0x28134F80)
@@ -289,6 +290,15 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
         ccode, cwrap = clk_stop.build(cbase)
         assert cbase + len(ccode) <= focus_emmc.END, "clock-stop wrappers do not fit after segment 1"
         ck = (cbase, ccode, cwrap)
+    ui = None
+    if unbound_info.ENABLED:                           # NAM_UNBOUND_INFO=1: editor command 0x53, which firmware this is
+        # after segment 1 too (the seg0 cave is full with the mirror and the meter), behind the reader and the wrappers
+        ubase = (ck[0] + ((len(ck[1]) + 3) & ~3) if ck else
+                 focus_emmc.VA + (((len(focus_emmc.load()) + 3) & ~3) if focus_emmc.ENABLED else 0))
+        ublocks = [(pid, DSP_COST)]
+        ucode = unbound_info.build(ubase, ublocks, (mirror[0] + mirror[2]["fm_regall"]) if mirror else None)
+        assert ubase + len(ucode) <= focus_emmc.END, "the unbound info module does not fit after segment 1"
+        ui = (ubase, ucode, ublocks)
     assert CAVE + len(cave) <= CAVE_END, f"cave {len(cave)} bytes, room {CAVE_END - CAVE}"
     fe = None
     if focus_emmc.ENABLED:                             # NAM_EMMC_ART=1: Focus View's pictures from the eMMC store
@@ -336,6 +346,8 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
         for va, b in clk_stop.site_patches(ck[2]).items():
             im.wr(va, b)
         log.append(f"clock-stop Transparent fix: wrappers {ck[0]:#x} ({len(ck[1])} B), {len(clk_stop.SITES)} sites")
+    if ui:                                             # after the mirror: its trampoline is replaced, fm_regall still runs
+        log.append(unbound_info.apply(im, ui[0], ui[2], mirror))
     # splice the cave after seg0's bytes and move every later segment
     b, segs = im.b, im.segs
     h0, p0, l0, d0, n0 = segs[0]
@@ -345,16 +357,22 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
     for h, p, l, d, n in segs[1:]:
         struct.pack_into('<3I', out, h + delta, l, d, n + delta)
     struct.pack_into('<I', out, 4, len(out))
-    if fe or ck:                                       # code after segment 1's bytes: the Focus View reader, then the clock-stop wrappers
+    if fe or ck or ui:                                 # code after segment 1's bytes: the Focus View reader, the clock-stop wrappers, the info
         tail = (fe[0] + bytes((-len(fe[0])) & 3)) if fe else b""
         if ck:
             assert focus_emmc.VA + len(tail) == ck[0], "clock-stop wrappers are not where the sites point"
-        out = bytearray(focus_emmc.append_to_seg1(bytes(out), segments, tail + (ck[1] if ck else b"")))
+            tail += ck[1] + bytes((-len(ck[1])) & 3)
+        if ui:
+            assert focus_emmc.VA + len(tail) == ui[0], "the unbound info module is not where the trampoline points"
+            tail += ui[1]
+        out = bytearray(focus_emmc.append_to_seg1(bytes(out), segments, tail))
         if fe:
             log.append(f"Focus View from the eMMC store: {len(fe[0])} B at {focus_emmc.VA:#x} (after segment 1); "
                        "focus_img -> fe_img, the end of dm_paint -> bl fe_hook (the block icons)")
         if ck:
             log.append(f"clock-stop wrappers appended after segment 1 at {ck[0]:#x} ({len(ck[1])} B)")
+        if ui:
+            log.append(f"unbound info appended after segment 1 at {ui[0]:#x} ({len(ui[1])} B)")
     out = l6ia.fix_internal_crcs(bytes(out))
     log.append(f"seg0 {l0:#x} -> {l0 + delta:#x} bytes (cave {CAVE:#x}..{CAVE + delta:#x}, "
                f"{CAVE_END - CAVE - delta} bytes left); Entry 0 {len(e0):#x} -> {len(out):#x}")
@@ -362,7 +380,7 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None):
     log.append(f"IR-name title: caves {ca:#x} / {cb:#x} ({len(tcode)} B); sites {ir_title.SITE_A:#x}, "
                f"{ir_title.SITE_B:#x} (via relay {ir_title.RELAY:#x}) for preset id {pid}")
     log.append(f"tables at Table 1 {a1:#x}, Table 2 {a2:#x}, lists " + ", ".join(f"({i // 4},{i % 4}) {v:#x}" for i, _, v in la))
-    return out, pid, log, (a1, a2, la, ca, cb, tcode, mirror, meter, fe, ck)
+    return out, pid, log, (a1, a2, la, ca, cb, tcode, mirror, meter, fe, ck, ui)
 
 
 def verify(e0, src_ni, new_ni, addrs, xeno_ni=None):
@@ -370,7 +388,7 @@ def verify(e0, src_ni, new_ni, addrs, xeno_ni=None):
     code in the cave run through the guard tests' interpreter."""
     n_t1 = 823 if E555 else 824
     im = Image(e0)
-    a1, a2, la, ca, cb, tcode, mirror, meter, fe, ck = addrs
+    a1, a2, la, ca, cb, tcode, mirror, meter, fe, ck, ui = addrs
     if fe:
         assert im.rd(focus_emmc.VA, len(fe[0])) == fe[0], "Focus View eMMC reader"
         assert all(im.rd(va, len(b)) == b for va, b in fe[1]), "Focus View eMMC reader's patches in the DSP meter"
@@ -380,7 +398,12 @@ def verify(e0, src_ni, new_ni, addrs, xeno_ni=None):
     if mirror:
         mva, mcode, msyms = mirror
         assert im.rd(mva, len(mcode)) == mcode
-        assert im.rd(screen_mirror.REGALL, 8) == screen_mirror.tramp(mva + msyms["fm_regall"])
+        if not ui:                                     # with the info module its trampoline sits there and calls fm_regall
+            assert im.rd(screen_mirror.REGALL, 8) == screen_mirror.tramp(mva + msyms["fm_regall"])
+    if ui:
+        usyms = unbound_info.load()[1]
+        assert im.rd(ui[0], len(ui[1])) == ui[1], "unbound info module"
+        assert im.rd(unbound_info.REGALL, 8) == unbound_info.tramp(ui[0] + usyms["ui_regall"]), "unbound info trampoline"
     if meter:
         dva, dcode, dsyms = meter
         assert im.rd(dva, len(dcode)) == dcode
