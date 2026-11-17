@@ -1,0 +1,38 @@
+"""floor-web/floor-worker.js, the in-browser Floor build: it loads every Python module the build's scripts import.
+A module missing from its SOURCES list fails only in the browser (the Pyodide run cannot fetch it), so check here."""
+import re
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+WORKER = (ROOT / "floor-web/floor-worker.js").read_text(encoding="utf-8")
+DIRS = ("helix-floor/floor", "tools", "tools/sharc")
+NOT_IN_BROWSER = {"capstone", "bench2"}             # capstone: stubbed (listing only); bench2: the kernels' --bench only
+
+
+def listed():
+    return set(re.findall(r'"((?:helix-floor|tools)/[\w/.-]+)"', WORKER.split("var SOURCES")[1].split("];")[0]))
+
+
+def local_module(name):
+    for d in DIRS:
+        if (ROOT / d / f"{name}.py").is_file():
+            return f"{d}/{name}.py"
+    return None
+
+
+def test_listed_files_exist():
+    assert all((ROOT / p).is_file() for p in listed())
+
+
+def test_sources_cover_every_import():
+    have = listed()
+    need, todo = set(), [p for p in have if p.endswith(".py")]
+    while todo:
+        text = (ROOT / todo.pop()).read_text(encoding="utf-8")
+        names = re.findall(r"^\s*import (\w+)", text, re.M) + re.findall(r"^\s*from (\w+) import", text, re.M)
+        for name in set(names) - NOT_IN_BROWSER:
+            path = local_module(name)
+            if path and path not in need:
+                need.add(path)
+                todo.append(path)
+    assert not need - have, f"missing from floor-worker.js SOURCES: {sorted(need - have)}"

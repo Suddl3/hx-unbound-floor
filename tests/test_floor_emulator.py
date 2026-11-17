@@ -27,13 +27,14 @@ def test_emulator_script(name):
     assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
 
 
-def test_background_store():
+@pytest.mark.parametrize("script", ["test_bg_store.py", "test_picture_store_doc.py"])
+def test_background_store(script):
     pytest.importorskip("PIL")
-    r = run("test_bg_store.py")
+    r = run(script)
     assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
 
 
-@pytest.mark.parametrize("module", ["dsp_meter.py", "focus_emmc.py"])
+@pytest.mark.parametrize("module", ["dsp_meter.py", "focus_emmc.py", "unbound_info.py"])
 def test_committed_binary_matches_source(module):
     pytest.importorskip("ziglang")
     r = run(module, "--check")
