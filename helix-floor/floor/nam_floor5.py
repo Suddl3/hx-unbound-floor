@@ -27,6 +27,7 @@ sys.path.insert(0, HERE)
 import nam_floor as nf  # noqa: E402
 import nam_floor2 as n2  # noqa: E402
 import nam_floor3 as n3  # noqa: E402
+import nam_pedal as npd  # noqa: E402
 from nam_floor import nm, nam_lite, nam_pack, sasm, C, NL, KERNEL, DILATION, FAR_D  # noqa: E402
 
 REGIONS3 = n2.REGIONS2
@@ -290,6 +291,8 @@ def kernel_src():
         a = "\nlwait:\n"
         assert src.count(a) == 1
         src = src.replace(a, MP_SUB + a)
+    if PEDAL:
+        src = npd.kernel_src(src)
     if P9_SHARE and not KEEP_POLLS:      # room for it: the wait-poll count (REP R_POLLS /
         n = src.count(POLL_INC)          # R_MAXPOLLS) only fed the simulator's bench and the meters
         src = src.replace(POLL_INC, "")
@@ -564,6 +567,7 @@ mpump:
 # sentinel. 192 -> 24 TCBs a call for the tap jobs.
 GATHER = os.environ.get("NAM_GATHER") == "1"
 PRB_WORDS = 0                       # (nam_floor5t: the tap-list probe's buffer)
+PEDAL = npd.PEDAL                   # the NAM Pedal block (NAM_PEDAL=1; nam_pedal.py)
 TLEN = 0x200
 GTCB = 8
 G_TAP = ("""    // a far layer's taps: TCB 3t + c reads tap t (oldest first) of channel c
@@ -1083,7 +1087,7 @@ def names():
     return nf.names() + ["HFLAG", "HDR_RECH", "T_NXN", "T_NXO", "T_NXB", "T_NXR", "W_OFF", "HDR", "SIL_N",
                          "N_WEIGHTS", "LBROW0", "LBSUM", "LBF0", "LBF1", "DIAG", "DCNT", "DCAUSE", "FT_SIZE",
                          "S_PMB", "INST_DM_SPAN", "INST_PM_SPAN"] + \
-        (["MSKD"] if P9_SHARE and P9_MODE != "nomask" else []) + (["MPS", "MP_INNER", "MP_OUTER"] if MID_PUMP else []) +         (["TLEN", "GTCB"] if GATHER else []) + (["DONEM", "WBFLAG"] if NOSENT else []) + (["T_P"] if PAIR else []) + (["LBF2"] if LB3 else []) + (["J_CHK2", "J_TMP"] if LINK else [])
+        (["MSKD"] if P9_SHARE and P9_MODE != "nomask" else []) + (["MPS", "MP_INNER", "MP_OUTER"] if MID_PUMP else []) +         (["TLEN", "GTCB"] if GATHER else []) + (["DONEM", "WBFLAG"] if NOSENT else []) + (["T_P"] if PAIR else []) + (["LBF2"] if LB3 else []) + (["J_CHK2", "J_TMP"] if LINK else []) + (npd.NAMES if PEDAL else [])
 
 
 def equs(v):
@@ -1200,6 +1204,8 @@ class Layout(n2.Layout):
         self.nrp = len(near) + 1
         o = self.s_rp + self.nrp
         o += o & 1
+        self.s_ped = o                   # (PEDAL) 1 in the NAM Pedal block's own slot, 0 in a NAM slot
+        o += 2 if PEDAL else 0
         self.slot_size = o
         self.near_at, off = {}, {1: 0, 2: 0}
         for sel, layers in ((1, nf.DM_LAYERS), (2, nf.PM_LAYERS)):
@@ -1262,7 +1268,7 @@ class Layout(n2.Layout):
         self.stomp_gain = self.eq_tab + 4 * 101 * 5
         a = self.stomp_gain + 1
         for name, n in (("RPTAB", 3 * self.nrp), ("CLR", 3 * self.nclr), ("DRIVE_TAB", 101), ("FADE_TAB", 18),
-                        ("TROWS", (NL + 1) * T_SIZE3)):          # (+ a blank row: the head's fetch)
+                        ("TROWS", (NL + 1) * T_SIZE3)) + ((("PTAB", 8),) if PEDAL else ()):          # (+ a blank row: the head's fetch)
             alloc[name] = a
             a += n
         self.ddr2_to = a
@@ -1294,6 +1300,13 @@ class Layout(n2.Layout):
                  **({"MPS": alloc["MPS"], "MP_INNER": 8 // MID_PUMP, "MP_OUTER": MID_PUMP} if MID_PUMP else {}),
                  **({"TLEN": TLEN, "GTCB": GTCB} if GATHER else {}),
                  **({"PRB": alloc["PRB"]} if PRB_WORDS else {}))
+        if PEDAL:
+            v.update(PED_TAG=npd.PED_TAG, PSLOT=npd.PSLOT, SLOT_SIZE=self.slot_size, S_PED=self.s_ped,
+                     S_PD=nm.S_STREAM, PED_N=npd.PED_N, PED_H=npd.PED_H, PTAB=alloc["PTAB"], P_LIM=npd.P_LIM)
+            assert nm.S_STREAM + 12 <= self.s_rp and self.s_ped + 1 < self.slot_size
+            assert npd.PSLOT + self.slot_size + npd.PED_N + 1 <= self.inst_dm_need, "the pedal's DM does not fit"
+            assert nf.INST_PM + 1 + npd.PED_H <= self.inst_pm_need, "the pedal histories do not fit"
+            assert npd.PED_TAG & 0xFFFFFF00 == npd.LIM_TAG
         self.v = v
         self.b3_to = None
 
@@ -1377,6 +1390,11 @@ class Layout(n2.Layout):
         put(al["FTAB"], ftab)
         if "WADDR" in al:
             put(al["WADDR"], [0] * F)
+        if PEDAL:                                         # the stages' [offset, length]; NAM slots not pedal
+            offs = [sum(npd.PED_FIR[:i]) for i in range(4)]
+            put(al["PTAB"], [x for o, n in zip(offs, npd.PED_FIR) for x in (o, n)])
+            for s_ in self.slot:
+                put(s_ + v["S_PED"], [0])
         rp_slot = self.s_rp + self.nrp - 1
         rpt = []
         for i, j in sorted(self.rp_index.items(), key=lambda x: x[1]):
