@@ -97,7 +97,8 @@ experimental model layout. Keep independent NAM-preserving records and check the
 - Excludes `NAM_GR_METER` and `NAM_555`. The pedal counts as an amp for the two-amps-per-DSP guard.
 - The block is told apart by the instance word `P_LIM` (16) = `0x4E4C00FE`, set by the pedal's graph at creation. A pedal block refuses NAM captures and a NAM block refuses pedal models (silence), by the model's word count in IR word 4.
 - Test: `floor/test_nam_pedal.py` (bit-exact against `ped_ref`, refusals both ways, NAM blocks unchanged). Build: `NAM_PEDAL=1 NAM_PAIR=1 NAM_NOSENT=1 NAM_PR1=0 python floor/build_floor2.py <stock.hxf> -o <out>`.
-- Not run on a unit yet; per-capture Focus View pictures are not set up for the pedal.
+- With `NAM_LB_B0=2` placement (your installed FOCUS27 build) the pedal build lets the block chains fall back to R3, and `NAM_SCREEN_MIRROR` puts the mirror module after segment 1 (the seg0 cave is full otherwise).
+- Unit test (2026-11-17, FOCUS27 flags + pedal, `FOCUS28_NAMPEDAL`): NAM block unchanged, pedal block plays a pedal model (level within 0.3 dB of `ped_ref`, odd harmonics only), refuses NAM captures and NAM blocks refuse pedal models, NAM + pedal on one DSP steady for 30 s. Not set up: per-capture Focus View pictures for the pedal (it shows a generic amp icon); the cost 850 is not measured on the unit.
 
 ## Layout
 

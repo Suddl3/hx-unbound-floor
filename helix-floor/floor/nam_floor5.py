@@ -520,7 +520,7 @@ PLACE = {"LB": ["R3"], "SLOT0": ["R3"], "SLOT1": ["R3"], "RCH0": ["R3"], "RCH1":
 if os.environ.get("NAM_LB_B0") == "2":
     PLACE = {**{k: ["R3"] for k in ("LB", "OUTBUF", "FTAB", "WCH0", "HS", "FLAGREP", "FCH0", "FCH1", "LCH",
                                     "WADDR", "SLOTTAB")},
-             **{k: ["R1", "R2"] for k in ("SLOT0", "SLOT1", "RCH0", "RCH1", "SAVE", "X", "IN", "SB", "JOBS")}}
+             **{k: ["R1", "R2"] + (["R3"] if npd.PEDAL else []) for k in ("SLOT0", "SLOT1", "RCH0", "RCH1", "SAVE", "X", "IN", "SB", "JOBS")}}
 MP_LOOP = ("""      LCNTR = 8, DO n_pair UNTIL LCE;""", """      LCNTR = MP_OUTER, DO n_mp UNTIL LCE;
       LCNTR = MP_INNER, DO n_pair UNTIL LCE;""")
 MP_END = ("""n_pair: DM(I3, M6) = F13;

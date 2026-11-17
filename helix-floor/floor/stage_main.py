@@ -305,7 +305,10 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None, ped_ni=None
     mirror = None
     if screen_mirror.ENABLED:                          # NAM_SCREEN_MIRROR=1: editor command 0x52 (screen_mirror.py)
         mcode, msyms = screen_mirror.load()
-        mirror = (put(mcode), mcode, msyms)
+        # NAM_PEDAL: the cave is full (the pedal's rows need ~210 bytes): the mirror module (position-independent;
+        # only the trampoline at REGALL names it) goes after segment 1's bytes instead, behind the Focus View reader
+        # and the clock-stop wrappers
+        mirror = (None if PEDAL else put(mcode), mcode, msyms)
     meter = None
     if dsp_meter.ENABLED:                              # NAM_DSP_METER=1: block costs on the home view (dsp_meter.py)
         dcode, dsyms = dsp_meter.load()
@@ -318,12 +321,20 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None, ped_ni=None
         ccode, cwrap = clk_stop.build(cbase)
         assert cbase + len(ccode) <= focus_emmc.END, "clock-stop wrappers do not fit after segment 1"
         ck = (cbase, ccode, cwrap)
+    # NAM_PEDAL: the cave is full (the pedal's table rows need ~210 bytes), so the screen mirror module (position-independent;
+    # only the trampoline at REGALL names it) goes after segment 1's bytes: behind the Focus View reader and the clock-stop
+    # wrappers, ahead of the info module
+    tail_end = (ck[0] + ((len(ck[1]) + 3) & ~3) if ck else
+                focus_emmc.VA + (((len(focus_emmc.load()) + 3) & ~3) if focus_emmc.ENABLED else 0))
+    if mirror and mirror[0] is None:
+        assert tail_end + len(mirror[1]) <= focus_emmc.END, "the mirror module does not fit after segment 1"
+        mirror = (tail_end, mirror[1], mirror[2])
+        tail_end += (len(mirror[1]) + 3) & ~3
     ui = None
     if unbound_info.ENABLED:                           # NAM_UNBOUND_INFO=1: editor command 0x53, which firmware this is
         # after segment 1 too (the seg0 cave is full with the mirror and the meter), behind the reader and the wrappers
-        ubase = (ck[0] + ((len(ck[1]) + 3) & ~3) if ck else
-                 focus_emmc.VA + (((len(focus_emmc.load()) + 3) & ~3) if focus_emmc.ENABLED else 0))
-        ublocks = [(pid, DSP_COST)]
+        ubase = tail_end
+        ublocks = [(pids[0], DSP_COST)] + ([(pids[1], PEDAL_COST)] if ped_ni is not None else [])
         ucode = unbound_info.build(ubase, ublocks, (mirror[0] + mirror[2]["fm_regall"]) if mirror else None)
         assert ubase + len(ucode) <= focus_emmc.END, "the unbound info module does not fit after segment 1"
         ui = (ubase, ucode, ublocks)
@@ -385,11 +396,15 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None, ped_ni=None
     for h, p, l, d, n in segs[1:]:
         struct.pack_into('<3I', out, h + delta, l, d, n + delta)
     struct.pack_into('<I', out, 4, len(out))
-    if fe or ck or ui:                                 # code after segment 1's bytes: the Focus View reader, the clock-stop wrappers, the info
+    mtail = bool(mirror and PEDAL)                     # (NAM_PEDAL: the mirror module after segment 1)
+    if fe or ck or ui or mtail:                        # code after segment 1's bytes: the Focus View reader, the clock-stop wrappers, the mirror, the info
         tail = (fe[0] + bytes((-len(fe[0])) & 3)) if fe else b""
         if ck:
             assert focus_emmc.VA + len(tail) == ck[0], "clock-stop wrappers are not where the sites point"
             tail += ck[1] + bytes((-len(ck[1])) & 3)
+        if mtail:
+            assert focus_emmc.VA + len(tail) == mirror[0], "the mirror module is not where its trampoline points"
+            tail += mirror[1] + bytes((-len(mirror[1])) & 3)
         if ui:
             assert focus_emmc.VA + len(tail) == ui[0], "the unbound info module is not where the trampoline points"
             tail += ui[1]
