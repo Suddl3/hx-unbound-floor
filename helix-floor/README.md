@@ -89,6 +89,16 @@ because it does not know the custom model. The [Floor editor preview](../EDITOR.
 the normal ID 380 NAM block; this does not make stock backup/restore lossless or cover every
 experimental model layout. Keep independent NAM-preserving records and check the pairing guide.
 
+## NAM Pedal (experimental, off by default)
+
+`NAM_PEDAL=1` adds a second model, **NAM Pedal**, beside NAM A2 Lite: a cheap pedal model (FIR, curve, FIR, curve, FIR, curve, FIR; 627 words, no DMA, about 10K instructions a call against about 33K for a NAM block). The kernel side is `floor/nam_pedal.py`; the build adds the model, a Table 1/2 row (preset id 768 if free, cost 850, `NAM_PEDAL_COST` to change it), browser items and the IR-name title.
+
+- **Needs the PAIR layout** (`NAM_PAIR=1 NAM_NOSENT=1`): on the pinned non-PAIR kernel (f4338695) the pedal is 90 words over the code room. A pedal build is a separate image, not the pinned one. With PAIR the NAM block's cost is nearer 3250 than the default 3600 (`NAM_DSP_COST`).
+- Excludes `NAM_GR_METER` and `NAM_555`. The pedal counts as an amp for the two-amps-per-DSP guard.
+- The block is told apart by the instance word `P_LIM` (16) = `0x4E4C00FE`, set by the pedal's graph at creation. A pedal block refuses NAM captures and a NAM block refuses pedal models (silence), by the model's word count in IR word 4.
+- Test: `floor/test_nam_pedal.py` (bit-exact against `ped_ref`, refusals both ways, NAM blocks unchanged). Build: `NAM_PEDAL=1 NAM_PAIR=1 NAM_NOSENT=1 NAM_PR1=0 python floor/build_floor2.py <stock.hxf> -o <out>`.
+- Not run on a unit yet; per-capture Focus View pictures are not set up for the pedal.
+
 ## Layout
 
 | Folder | What |
