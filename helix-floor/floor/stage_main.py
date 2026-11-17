@@ -304,7 +304,10 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None, ped_ni=None
     mirror = None
     if screen_mirror.ENABLED:                          # NAM_SCREEN_MIRROR=1: editor command 0x52 (screen_mirror.py)
         mcode, msyms = screen_mirror.load()
-        mirror = (put(mcode), mcode, msyms)
+        # NAM_PEDAL: the cave is full (the pedal's rows need ~210 bytes): the mirror module (position-independent;
+        # only the trampoline at REGALL names it) goes after segment 1's bytes instead, behind the Focus View reader
+        # and the clock-stop wrappers
+        mirror = (None if PEDAL else put(mcode), mcode, msyms)
     meter = None
     if dsp_meter.ENABLED:                              # NAM_DSP_METER=1: block costs on the home view (dsp_meter.py)
         dcode, dsyms = dsp_meter.load()
@@ -317,7 +320,6 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None, ped_ni=None
         ccode, cwrap = clk_stop.build(cbase)
         assert cbase + len(ccode) <= focus_emmc.END, "clock-stop wrappers do not fit after segment 1"
         ck = (cbase, ccode, cwrap)
-    assert CAVE + len(cave) <= CAVE_END, f"cave {len(cave)} bytes, room {CAVE_END - CAVE}"
     fe = None
     if focus_emmc.ENABLED:                             # NAM_EMMC_ART=1: Focus View's pictures from the eMMC store
         assert meter, "NAM_EMMC_ART needs NAM_DSP_METER"
@@ -331,6 +333,11 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None, ped_ni=None
         fe = (focus_emmc.with_literals(focus_emmc.load(), meter[0] + meter[2]["dm_cfg"], focus_fill,
                                        pre_ret),
               [(meter[0] + off, jb) for off, jb in mpatch.items()])
+    if mirror and mirror[0] is None:
+        mva = focus_emmc.VA + (((len(fe[0]) + 3) & ~3) if fe else 0) + ((len(ck[1]) + 3) & ~3 if ck else 0)
+        assert mva + len(mirror[1]) <= focus_emmc.END, "the mirror module does not fit after segment 1"
+        mirror = (mva, mirror[1], mirror[2])
+    assert CAVE + len(cave) <= CAVE_END, f"cave {len(cave)} bytes, room {CAVE_END - CAVE}"
     # pointers and counts (all in seg2: the file offsets don't move with seg0's growth... they do,
     # so everything is written before the cave is spliced in)
     for p in TAB1_BASE_PTRS:
@@ -373,11 +380,16 @@ def build_e0(e0, src_ni, new_ni, n_params, xeno_ni=None, names=None, ped_ni=None
     for h, p, l, d, n in segs[1:]:
         struct.pack_into('<3I', out, h + delta, l, d, n + delta)
     struct.pack_into('<I', out, 4, len(out))
-    if fe or ck:                                       # code after segment 1's bytes: the Focus View reader, then the clock-stop wrappers
+    mtail = bool(mirror and PEDAL)                      # (NAM_PEDAL: the mirror module after segment 1)
+    if fe or ck or mtail:                              # code after segment 1's bytes: the Focus View reader, then the clock-stop wrappers
         tail = (fe[0] + bytes((-len(fe[0])) & 3)) if fe else b""
         if ck:
             assert focus_emmc.VA + len(tail) == ck[0], "clock-stop wrappers are not where the sites point"
-        out = bytearray(focus_emmc.append_to_seg1(bytes(out), segments, tail + (ck[1] if ck else b"")))
+        body = tail + ((ck[1] + bytes((-len(ck[1])) & 3)) if ck else b"")
+        if mtail:
+            assert focus_emmc.VA + len(body) == mirror[0], "the mirror module is not where its trampoline points"
+            body += mirror[1]
+        out = bytearray(focus_emmc.append_to_seg1(bytes(out), segments, body))
         if fe:
             log.append(f"Focus View from the eMMC store: {len(fe[0])} B at {focus_emmc.VA:#x} (after segment 1); "
                        "focus_img -> fe_img, the end of dm_paint -> bl fe_hook (the block icons)")
