@@ -13,7 +13,7 @@ import pytest
 
 FLOOR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "helix-floor", "floor")
 
-EMULATOR = ["test_dsp_meter", "test_focus_emmc", "test_block_icons", "test_emmc_art", "test_clk_stop", "test_screen_mirror"]
+EMULATOR = ["test_dsp_meter", "test_focus_emmc", "test_block_icons", "test_emmc_art", "test_clk_stop", "test_screen_mirror", "test_unbound_info"]
 
 
 def run(*args):
