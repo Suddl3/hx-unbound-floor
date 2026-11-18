@@ -1304,9 +1304,10 @@ class Layout(n2.Layout):
             v.update(PED_TAG=npd.PED_TAG, PSLOT=npd.PSLOT, SLOT_SIZE=self.slot_size, S_PED=self.s_ped,
                      S_PD=nm.S_STREAM, PED_N=npd.PED_N, PED_H=npd.PED_H, PTAB=alloc["PTAB"], P_LIM=npd.P_LIM)
             assert nm.S_STREAM + 12 <= self.s_rp and self.s_ped + 1 < self.slot_size
-            assert npd.PSLOT + self.slot_size + npd.PED_N + 1 <= self.inst_dm_need, "the pedal's DM does not fit"
+            assert npd.PSLOT + self.slot_size + npd.PED_CW + 1 <= self.inst_dm_need, "the pedal's DM does not fit"
             assert nf.INST_PM + 1 + npd.PED_H <= self.inst_pm_need, "the pedal histories do not fit"
             assert npd.PED_TAG & 0xFFFFFF00 == npd.LIM_TAG
+            assert self.slot_size % 2 == 0 and all(n % 2 == 0 for n in npd.PED_FIR), "the SIMD loops need even addresses"
         self.v = v
         self.b3_to = None
 

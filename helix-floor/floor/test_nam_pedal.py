@@ -90,6 +90,18 @@ def main():
     sim.wr(P1.i0 + npd.P_LIM, npd.PED_TAG)
     P1.knobs(drive=0.62, vol=0.7, model=11, eq=(0.3, 0.7, 0.45, 0.9))
 
+    # every two-at-a-time access inside the pedal's own memory (its DM block past the stock words, its PM histories) must
+    # start at an even address: the loops are written for that (the safe case on the unit)
+    odd_hits = []
+    dl0 = ssim.Sim.dload
+
+    def dload(self, a, i):
+        if self.simd and not ((i == 1 and self.u[ssim.U_MODE1] & ssim.BDCST1) or (i == 9 and self.u[ssim.U_MODE1] & ssim.BDCST9)):
+            if (P1.i0 + 145 <= a < P1.i0 + lay.inst_dm_need or P1.i8 + 13 <= a < P1.i8 + lay.inst_pm_need) and a % 2:
+                odd_hits.append(a)
+        return dl0(self, a, i)
+    ssim.Sim.dload = dload
+
     def expect(inst, block, label, words):
         got = inst.call(block, label)
         want = inst.pipe.block(words)
@@ -99,10 +111,51 @@ def main():
             raise nm.CheckFailed(f"{label}: {n} of 16 samples differ from the reference, by up to {err:.3g}")
         return got
 
+    def expected_layout():
+        out, o = [], 0
+        for st, n in enumerate(npd.PED_FIR):
+            c = loaded[o:o + n]
+            O, E = [0.0] * n, [0.0] * n
+            for k, v in enumerate(c):
+                O[k - 1 if k % 2 else k + 1] = v
+                if k == 0:
+                    E[n - 2] = v
+                elif k == n - 1:
+                    E[n - 1] = v
+                elif k % 2 == 0:
+                    E[k - 2] = v
+                else:
+                    E[k] = v
+            out += O + E
+            o += n
+            if st < 3:
+                out += loaded[o:o + npd.PED_K] + [None]
+                o += npd.PED_K
+        return out
+
+    def check_layout(inst):
+        """The load wrote each FIR stage in its two layouts (O, E) and the curves with a pad word."""
+        base = ((inst.i0 + npd.PSLOT) & ~1) + lay.slot_size
+        want = expected_layout()
+        assert len(want) == npd.PED_CW
+        bad = [j for j, w in enumerate(want) if w is not None and sim.rd(base + j) != ssim.f2b(w)]
+        if bad:
+            j0 = bad[0]
+            print("E start +%d: got" % j0, [hex(sim.rd(base + j0 + j)) for j in range(6)], "want", [hex(ssim.f2b(want[j0 + j])) for j in range(6)])
+            for nm_, wv in (("c0", want[1 if False else 63]), ("c1(E+1)", want[64 + 1]), ("c2(E+0)", want[64])):
+                hit = [j for j in range(-300, 1300) if wv is not None and sim.rd(base + j) == ssim.f2b(wv)]
+                print("find", nm_, "at offsets", hit[:6])
+            print("base", hex(base), "first words got", [hex(sim.rd(base + j)) for j in range(6)], "want", [hex(ssim.f2b(w)) for w in want[:6]])
+            hits = [j for j in range(-200, 1500) if sim.rd(base + j) == ssim.f2b(want[1])]
+            print("word want[1] found at offsets", hits[:6], "inst i0", hex(inst.i0), "slot base", hex(base - lay.slot_size))
+            print("around: got", [hex(sim.rd(base - 4 + j)) for j in range(4)])
+        assert not bad, f"{len(bad)} coefficient words differ from the expected layout, first at +{bad[0]} of {len(want)}"
+
     def play_pedal(inst, sig, label, nblk):
         """inst's next call loads the pedal model; then nblk blocks, each ped_ref on the block's input."""
         inst.pipe.cut()
         expect(inst, sig[0], f"{label} (load)", None)
+        check_layout(inst)
         inst.pipe.knobs(inst.eq)
         g = f32(nm.drive_gain(inst.drive))
         lv = nm.level(inst.vol)
@@ -143,6 +196,16 @@ def main():
     P1.knobs(model=11)
     play_pedal(P1, sig, "P1 pedal after the refusals", 8)
 
+    assert not odd_hits, f"two-at-a-time loads at odd addresses: {sorted(set(odd_hits))[:8]}"
+    # against the first version of the block (one tap a cycle): only the rounding of the sums differs
+    rnd2 = random.Random(2)
+    xs = [0.3 * math.sin(0.05 * i) + 0.1 * rnd2.uniform(-1, 1) for i in range(600)]
+    a_, _ = npd.ped_ref(loaded, xs, 4.0, 1.0)
+    b_, _ = npd.ped_ref_scalar(loaded, xs, 4.0, 1.0)
+    err = max(abs(u - v) for u, v in zip(a_, b_))
+    rms = (sum(v * v for v in b_) / len(b_)) ** 0.5
+    print(f"new vs first version: worst difference {err:.2e} on a signal of rms {rms:.3f} ({20 * math.log10(err / rms + 1e-30):.0f} dB)")
+    assert err < 1e-5 * max(1.0, rms), "the SIMD block differs from the first version by more than rounding"
     print(f"pedal bit-exact: peak {peak:.3f}; steady calls of the pedal block: "
           f"{[c for lbl, c in r.cycles if lbl.startswith('P1 pedal') and 'load' not in lbl][-1:]}")
     worst = max(c for lbl, c in r.cycles if lbl.startswith("P1 pedal") and "load" not in lbl)
