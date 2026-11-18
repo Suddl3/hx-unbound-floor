@@ -122,8 +122,9 @@ def tables(im, src_ni, new_ni, n_params, xeno_ni=None, ped_ni=None):
     pids = [pid]
     if ped_ni is not None:                    # NAM Pedal: preset id 768 (a Thumb-2 immediate) if free, else the next valid one
         assert not E555
-        okp = [p for p in free[1:] if p < 256 or pa._thumb_modimm(p) is not None]
-        ppid = PEDAL_PID if PEDAL_PID in free else okp[0]
+        # the editor's catalog and saved presets assume id 768: no fallback to another id
+        assert PEDAL_PID in free and pa._thumb_modimm(PEDAL_PID) is not None, f"preset id {PEDAL_PID} is not free on this firmware (free: {free[:12]}...)"
+        ppid = PEDAL_PID
         t1 += struct.pack('<IHHI', ped_ni, ppid, 0, PEDAL_COST)
         pids.append(ppid)
         n1 += 1
