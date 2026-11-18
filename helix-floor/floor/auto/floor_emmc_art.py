@@ -12,6 +12,12 @@
                                    to 0x460000 (eMMC past the partitions); bg-off removes the section
   floor_emmc_art.py erase          zeroes the store's header sectors (the pictures stay but are never read)
 
+  floor_emmc_art.py write [SIZE] --input store.json     the editor's file (store_input.py; HX Edit Unbound's "Floor look" page):
+  floor_emmc_art.py icons [SIZE] --input store.json     picture size, models folder, scenes and assignment, each NAM capture
+                                                        slot's picture and icon, the NAM block's preset id. What the file leaves
+                                                        out is done as without it; --scenes / --assign / --theme / SIZE on the
+                                                        command line win over the file.
+
 Store at 0x400000: sector 0 = "HXPC" + 12 bytes, then the header emmc_art.s reads ({u16 S, u16 preset ids, u32 first
 picture sector, u16 map[preset id]}); pictures from 0x400000 + HDR_SECTORS, each on its own sectors. The card has
 0x760000 sectors; the last partition ends at 0x3b7607; everything sampled past it read as zeros before the first write.
@@ -29,6 +35,9 @@ sys.path.insert(0, FLOOR)
 import floor_emmc  # noqa: E402
 import floor_peek  # noqa: E402
 import floor_poke  # noqa: E402
+import store_input  # noqa: E402
+
+STORE_INPUT = None              # the editor's file, loaded by main (--input), else None
 
 STORE = 0x400000
 HDR_SECTORS = 12                # header sectors (m4/focus_emmc.s HDR_SECS, bg_store.HDR_SECTORS): pictures start after them
@@ -74,19 +83,20 @@ def build(size, scenes=None, assign=None, theme=None):
         pics = [rgb555(art_map.open_picture(p), size) for p in m["pictures"]]
     spp = (size * size * 2 + 511) // 512
     nam = b""
-    if os.environ.get("NAM_ICON_PIX") and NAM_ICONS:     # each NAM capture's own big picture (m4/focus_emmc.s fe_img, FNAM_*)
+    by_slot = nam_images("picture")                      # each NAM capture's own big picture (m4/focus_emmc.s fe_img, FNAM_*)
+    if by_slot:
         from PIL import Image
-        by_slot, folder = nam_slot_icons()
-        slot = slots_a[NAM_PID] if scenes and NAM_PID < n else None
+        nam_pid = nam_preset_id()
+        slot = slots_a[nam_pid] if scenes and nam_pid < n else None
         at = {}
         for ident in sorted(set(by_slot.values())):
-            img = Image.open(os.path.join(folder, ident + ".png"))
+            img = Image.open(ident)
             at[ident] = len(pics)
             pics.append(rgb555(img, size) if slot is None else bg_store.composite(scn[slot], img, size))
         tab = [0xFFFF] * 128
         for sl, ident in by_slot.items():
             tab[sl - 1] = at[ident]
-        nam = struct.pack("<H", NAM_PID + 1) + bytes(6) + struct.pack("<128H", *tab)    # at 1784 (u16 pid + 1) and 1792 (table)
+        nam = struct.pack("<H", nam_pid + 1) + bytes(6) + struct.pack("<128H", *tab)    # at 1784 (u16 pid + 1) and 1792 (table)
         print(f"{len(at)} NAM capture pictures for {len(by_slot)} capture slots")
     hdr = MAGIC + struct.pack("<HH", 1, len(pics)) + bytes(8)
     hdr += struct.pack("<HHI", size, n, STORE + HDR_SECTORS) + struct.pack(f"<{n}H", *mp)
@@ -214,6 +224,23 @@ def nam_slot_icons():
     return {int(k): capture_icons.pick(v.get("name", "")) for k, v in slots.items() if 1 <= int(k) <= 128},         os.environ.get("NAM_ICON_PIX") or os.path.join(code, "nam_capture_icons")
 
 
+def nam_preset_id():
+    """The NAM block's preset id: the editor's file (the first of nam.preset_ids), else NAM_PID."""
+    return (STORE_INPUT or {}).get("nam_pid") or NAM_PID
+
+
+def nam_images(kind, always=False):
+    """{capture slot: png path} of each NAM capture's `kind` ("picture": the big Focus View one, "icon": the chain-view one).
+    With the editor's file, what it lists. Without it: the pictures only when NAM_ICON_PIX and NAM_CAPTURE_ICONS are set
+    (as before), the icons (always=True) from the editor code's capture_icons, as before."""
+    if STORE_INPUT is not None:
+        return {s: e[kind] for s, e in STORE_INPUT["nam"].items() if e.get(kind)}
+    if not always and not (os.environ.get("NAM_ICON_PIX") and NAM_ICONS):
+        return {}
+    by_slot, folder = nam_slot_icons()
+    return {s: os.path.join(folder, ident + ".png") for s, ident in by_slot.items()}
+
+
 ICON_MAX_SIZE = 44              # the frame's inside (m4/focus_emmc.s: the firmware refuses anything else)
 ICON_MAX_SECTORS = 10230        # picture sectors that fit the RAM set aside, 0x29a00000 + header up to the live code at 0x29f00000
 
@@ -232,11 +259,11 @@ def icons_build(size=ICON_SIZE):
     pics = []
     for pth in m["pictures"]:
         pics.append(rgb555(art_map.open_picture(pth), size))
-    by_slot, folder = nam_slot_icons()
+    by_slot = nam_images("icon", always=True)
     ids = sorted(set(by_slot.values()))
     nam_table = [0xFFFF] * 128
     for k, ident in enumerate(ids):
-        pics.append(rgb555(Image.open(os.path.join(folder, ident + ".png")), size))
+        pics.append(rgb555(Image.open(ident), size))
         for slot, i in by_slot.items():
             if i == ident:
                 nam_table[slot - 1] = len(m["pictures"]) + k
@@ -244,7 +271,7 @@ def icons_build(size=ICON_SIZE):
     hdr = struct.pack("<4sHHIHH", b"HXPI", size, n, first, len(pics), spp) + bitmap
     hdr += struct.pack(f"<{n}H", *mp)
     assert len(hdr) <= 1912
-    hdr += bytes(1912 - len(hdr)) + struct.pack("<H", NAM_PID) + bytes(6) + struct.pack("<128H", *nam_table)
+    hdr += bytes(1912 - len(hdr)) + struct.pack("<H", nam_preset_id()) + bytes(6) + struct.pack("<128H", *nam_table)
     hdr += bytes(2304 - len(hdr)) + struct.pack("<1024H", *cols)
     assert len(hdr) <= ICON_HDR * 512
     hdr += bytes(ICON_HDR * 512 - len(hdr))
@@ -417,18 +444,34 @@ def erase():
 
 
 def main():
+    global STORE_INPUT
     a = sys.argv[1:]
+    flag = lambda f: a[a.index(f) + 1] if f in a else None
+    inp = flag("--input")
+    if inp:                                       # the editor's file (store_input.py): write and icons only
+        if not a or a[0] not in ("write", "icons"):
+            sys.exit("--input goes with write and icons")
+        try:
+            STORE_INPUT = store_input.load(inp)
+        except store_input.StoreInputError as e:
+            sys.exit(f"--input: {e}")
+        if STORE_INPUT["models_dir"]:
+            os.environ["HX_ART_DIR"] = STORE_INPUT["models_dir"]       # art_map.open_picture reads it at each picture
+        a = [x for x in a if x not in ("--input", inp)]
     if a and a[0] == "write":
-        flag = lambda f: a[a.index(f) + 1] if f in a else None
         rest = [x for x in a[1:] if x not in ("--scenes", "--assign", flag("--scenes"), flag("--assign"))]
         scenes, assign, theme = flag("--scenes"), flag("--assign"), flag("--theme")
+        assign = json.load(open(assign)) if assign else None
+        theme = json.load(open(theme)) if theme else None
+        if STORE_INPUT and not (scenes or assign or theme):          # the file's scenes, assignment and theme pack
+            scenes, assign, theme = STORE_INPUT["scenes_dir"], STORE_INPUT["assign"], STORE_INPUT["theme"]
         if bool(scenes) != bool(assign) or (theme and not scenes):
             sys.exit("--scenes and --assign go together; --theme (a second assignment, the theme pack) needs both")
-        rest = [x for x in rest if x != "--theme" and x != theme]
-        write(int(rest[0]) if rest else 128, scenes, json.load(open(assign)) if assign else None,
-              json.load(open(theme)) if theme else None)
+        rest = [x for x in rest if x != "--theme" and x != flag("--theme")]
+        size = int(rest[0]) if rest else (STORE_INPUT or {}).get("size") or 128
+        write(size, scenes, assign, theme)
     elif a and a[0] == "icons":
-        icons_write(int(a[1]) if len(a) > 1 else ICON_SIZE)
+        icons_write(int(a[1]) if len(a) > 1 else (STORE_INPUT or {}).get("icon_size") or ICON_SIZE)
     elif a and a[0] == "bg-live":
         bg_live()
     elif a and a[0] == "bg-test" and len(a) == 3:
