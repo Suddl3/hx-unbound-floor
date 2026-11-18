@@ -22,6 +22,8 @@ PED_K = 65                                      # knots of each curve, on [-PED_
 PED_R = 4
 PED_N = sum(PED_FIR) + 3 * PED_K                # 627: a, k1, b, k2, c, k3, d
 PED_H = sum(PED_FIR)                            # 432 history words (the PM block's room past its own)
+PED_KS = PED_K + 1                              # a curve's stride in memory: a pad word, so every FIR stage starts on an even address
+PED_CW = 2 * sum(PED_FIR) + 3 * PED_KS          # the coefficient words in memory: each FIR stage in two layouts (O, E) for the SIMD loops
 P_LIM = 16                                      # the instance word (pid) a block's tag is set in (0: none)
 LIM_TAG = 0x4E4C0000
 PED_TAG = LIM_TAG | 0xFE                        # P_LIM of a NAM Pedal block
@@ -84,6 +86,9 @@ PEDAL_PATCHES = [
 """, ""),
 ]
 
+LOAD_STAGES = "\n".join(f"    R4 = {n};\n    CALL ped_lf;" + ("\n    CALL ped_lc;" if st < 3 else "")
+                        for st, n in enumerate(PED_FIR))
+
 PEDAL_SUB = f"""
 // ---- the NAM Pedal block (PEDAL): its slot state at PSLOT in its own DM block, then the NAM path
 ped_entry:
@@ -106,10 +111,7 @@ ped_load:
     I5 = I6;
     MODIFY(I5, SLOT_SIZE);
     M2 = -1;
-    LCNTR = PED_N, DO ped_c UNTIL LCE;
-      F0 = DM(I4, M2);
-      F0 = F0 * F3;
-ped_c: DM(I5, 1) = F0;
+{LOAD_STAGES}
     R4 = DM(SAVE + 46);
     R1 = INST_PM + 1;
     R4 = R4 + R1;
@@ -131,6 +133,50 @@ ped_z: PM(I9, M9) = R0;
 ped_d: MODIFY(I4, 3);
     RTS;
 
+// a FIR stage's coefficients (R4 taps, from the IR's words, x the scale F3) in two layouts of L words, for the
+// two-at-a-time loops (ped_fir): O, for a newest sample at an odd address, pairs (c[2i+1], c[2i]); E, for an even
+// one, pairs (c[2i+2], c[2i+1]) for i = 0 .. L/2 - 2, then c0, then c[L-1]. I5 at the stage's O, left past its E.
+ped_lf:
+    R6 = I5;
+    R6 = R6 + R4;
+    R7 = R6 + R4;
+    R5 = 2;
+    R7 = R7 - R5;
+    I3 = R7;
+    F0 = DM(I4, M2);
+    F1 = DM(I4, M2);
+    F0 = F0 * F3;
+    F1 = F1 * F3;
+    DM(0, I3) = F0;
+    I3 = R6;
+    DM(1, I3) = F1;
+    DM(I5, 1) = F1;
+    DM(I5, 1) = F0;
+    R2 = R4;
+    R2 = LSHIFT R2 BY -1;
+    R2 = R2 - 1;
+    LCNTR = R2, DO ped_lp UNTIL LCE;
+      F0 = DM(I4, M2);
+      F1 = DM(I4, M2);
+      F0 = F0 * F3;
+      F1 = F1 * F3;
+      DM(I5, 1) = F1;
+      DM(I5, 1) = F0;
+      DM(3, I3) = F1;
+ped_lp: DM(I3, 2) = F0;
+    R7 = R6 + R4;
+    I5 = R7;
+    RTS;
+
+// a curve's PED_K knots, then a pad word (the next stage starts on an even address)
+ped_lc:
+    LCNTR = {PED_K}, DO ped_lcl UNTIL LCE;
+      F0 = DM(I4, M2);
+      F0 = F0 * F3;
+ped_lcl: DM(I5, 1) = F0;
+    MODIFY(I5, 1);
+    RTS;
+
 // the block: x = in x Drive (F14), FIR a, curve, FIR b, curve, FIR c, curve, FIR d, x the level
 ped_run:
     R0 = I6;
@@ -139,8 +185,10 @@ ped_run:
     R1 = S_PD;
     R6 = R0 + R1;
     F13 = DM(G_LEVEL);
-    M0 = 1;
+    M0 = 2;
+    M1 = 1;
     M8 = -1;
+    M10 = -2;
     LCNTR = 16, DO ped_smp UNTIL LCE;
       F8 = PM(I10, M9);
       F8 = F8 * F14;
@@ -164,19 +212,67 @@ ped_fir:
     B9 = DM(0, I4);
     L9 = DM(1, I4);
     I9 = DM(2, I4);
-    R2 = DM(1, I4);
-    R2 = R2 - 1;
     PM(I9, M9) = F8;
+    DM(2, I4) = I9;
     MODIFY(I9, M8);
+    R2 = DM(1, I4);
+    M2 = R2;
+    R2 = LSHIFT R2 BY -1;
+    R0 = I9;
+    R1 = 1;
+    R0 = R0 AND R1;
+    IF EQ JUMP ped_fe;
+    R2 = R2 - 1;                        // the newest sample at an odd address: L/2 pairs from the one before it
+    MODIFY(I9, M8);
+    BIT SET MODE1 PEYEN;
+    NOP;
     R8 = R8 - R8;
     R12 = R12 - R12;
-    F0 = DM(I1, M0), F4 = PM(I9, M8);
+    F0 = DM(I1, M0), F4 = PM(I9, M10);
     LCNTR = R2, DO ped_l UNTIL LCE;
-ped_l: F12 = F0 * F4, F8 = F8 + F12, F0 = DM(I1, M0), F4 = PM(I9, M8);
+ped_l: F12 = F0 * F4, F8 = F8 + F12, F0 = DM(I1, M0), F4 = PM(I9, M10);
     F12 = F0 * F4, F8 = F8 + F12;
     F8 = F8 + F12;
+    BIT CLR MODE1 PEYEN;
+    NOP;
+    R0 = S8;
+    F8 = F8 + F0;
+    MODIFY(I1, M2);
+    MODIFY(I4, 3);
+    RTS;
+ped_fe:                                 // at an even address: x[n] c0, L/2 - 1 pairs from two before it, x[n-L+1] c[L-1]
+    R3 = 2;
+    R2 = R2 - R3;
+    MODIFY(I1, M2);
+    F5 = PM(I9, M10);
+    R0 = I1;
+    R3 = M2;
+    R0 = R0 + R3;
+    R3 = 2;
+    R0 = R0 - R3;
+    I3 = R0;
+    F11 = DM(I3, M1);
+    F15 = DM(I3, M1);
+    F9 = F11 * F5;
+    BIT SET MODE1 PEYEN;
+    NOP;
+    R8 = R8 - R8;
+    R12 = R12 - R12;
+    F0 = DM(I1, M0), F4 = PM(I9, M10);
+    LCNTR = R2, DO ped_l2 UNTIL LCE;
+ped_l2: F12 = F0 * F4, F8 = F8 + F12, F0 = DM(I1, M0), F4 = PM(I9, M10);
+    F12 = F0 * F4, F8 = F8 + F12;
+    F8 = F8 + F12;
+    BIT CLR MODE1 PEYEN;
+    NOP;
+    R0 = S8;
+    F8 = F8 + F0;
     MODIFY(I9, M9);
-    DM(2, I4) = I9;
+    F5 = PM(I9, M9);
+    F10 = F15 * F5;
+    F8 = F8 + F9;
+    F8 = F8 + F10;
+    MODIFY(I1, 2);
     MODIFY(I4, 3);
     RTS;
 
@@ -201,7 +297,7 @@ ped_pwl:
     F1 = F1 - F0;
     F1 = F1 * F8;
     F8 = F0 + F1;
-    MODIFY(I1, {PED_K});
+    MODIFY(I1, {PED_KS});
     RTS;
 """
 
@@ -251,8 +347,56 @@ def packed_saves(src):
 
 
 def ped_ref(coefs, x, gain, level, state=None):
-    """The pedal model as p_run computes it, float32 op for op: (outputs, state). coefs: the PED_N
-    loaded words; x: the block's input samples (floats); state: the four histories and pointers."""
+    """The pedal model as ped_run computes it, float32 op for op: (outputs, state). coefs: the PED_N loaded words (the
+    model's order); x: the block's input samples (floats); state: the histories, pointers and sample count.
+    Each FIR stage runs two chains (the SIMD loops of ped_fir): with the newest sample at an odd address
+    L/2 pairs (c[2i+1] x[n-2i-1] on one chain, c[2i] x[n-2i] on the other); at an even address c0 x[n], L/2 - 1 pairs
+    (c[2i+2] x[n-2i-2], c[2i+1] x[n-2i-1]) and c[L-1] x[n-L+1]; each chain a running sum, the chains added, then the
+    head and the tail."""
+    import nam_lite
+    ssim = nam_lite.ssim
+    f = lambda v: ssim.b2f(ssim.f2b(v))
+    if state is None:
+        state = [[[0.0] * n for n in PED_FIR], [0] * 4]
+    hs, ps = state
+    out = []
+    for s in x:
+        v = f(s * gain)
+        o = 0
+        for st in range(4):
+            n = PED_FIR[st]
+            h, p = hs[st], ps[st]
+            h[p] = v
+            c = coefs[o:o + n]
+            xk = lambda k: h[(p - k) % n]
+            ax = ay = 0.0
+            if p % 2:
+                for i in range(n // 2):
+                    ax = f(ax + f(c[2 * i + 1] * xk(2 * i + 1)))
+                    ay = f(ay + f(c[2 * i] * xk(2 * i)))
+                acc = f(ax + ay)
+            else:
+                for i in range(n // 2 - 1):
+                    ax = f(ax + f(c[2 * i + 2] * xk(2 * i + 2)))
+                    ay = f(ay + f(c[2 * i + 1] * xk(2 * i + 1)))
+                acc = f(f(f(ax + ay) + f(c[0] * xk(0))) + f(c[n - 1] * xk(n - 1)))
+            ps[st] = (p + 1) % n
+            o += n
+            v = acc
+            if st < 3:
+                u = f(f(v * ((PED_K - 1) / (2 * PED_R))) + (PED_K - 1) / 2)
+                i = min(max(int(u) if abs(u) < 2 ** 31 else (2 ** 31 - 1 if u > 0 else -2 ** 31), 0), PED_K - 2)
+                fr = f(u - float(i))
+                k0, k1 = coefs[o + i], coefs[o + i + 1]
+                v = f(k0 + f(f(k1 - k0) * fr))
+                o += PED_K
+        out.append(f(v * level))
+    return out, state
+
+
+def ped_ref_scalar(coefs, x, gain, level, state=None):
+    """The first version of the block (one tap a cycle, one running sum a stage): what the NAM Pedal did before the
+    SIMD loops. ped_ref differs from it only by the rounding of the sums (about 1e-7 relative)."""
     import nam_lite
     ssim = nam_lite.ssim
     f = lambda v: ssim.b2f(ssim.f2b(v))
