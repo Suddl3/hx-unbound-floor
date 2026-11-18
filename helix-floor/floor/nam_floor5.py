@@ -518,7 +518,7 @@ PLACE = {"LB": ["R3"], "SLOT0": ["R3"], "SLOT1": ["R3"], "RCH0": ["R3"], "RCH1":
 # code's fetch is in Block 3): LB, HS, the flags, the far bookkeeping; Block 3 keeps X, IN, SB (read
 # beside LB's PM weights) and takes the slots and RCH chains.
 if os.environ.get("NAM_LB_B0") == "2":
-    PLACE = {**{k: ["R3"] for k in ("LB", "OUTBUF", "FTAB", "WCH0", "HS", "FLAGREP", "FCH0", "FCH1", "LCH",
+    PLACE = {**{k: ["R3"] + (["R1", "R2"] if npd.PEDAL else []) for k in ("LB", "OUTBUF", "FTAB", "WCH0", "HS", "FLAGREP", "FCH0", "FCH1", "LCH",
                                     "WADDR", "SLOTTAB")},
              **{k: ["R1", "R2"] + (["R3"] if npd.PEDAL else []) for k in ("SLOT0", "SLOT1", "RCH0", "RCH1", "SAVE", "X", "IN", "SB", "JOBS")}}
 MP_LOOP = ("""      LCNTR = 8, DO n_pair UNTIL LCE;""", """      LCNTR = MP_OUTER, DO n_mp UNTIL LCE;
