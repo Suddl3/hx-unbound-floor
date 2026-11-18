@@ -50,9 +50,10 @@ SEG0 = (0x10000000, 0x11870)
 DSP_COST = int(os.environ.get("NAM_DSP_COST", "3600"))   # 11-07: measured ~35% a call on the unit (meter 52.8K of ~150K cycles)
 NAME, DISPLAY, SHORT, FOLDER = 'HD2_AmpNAMLite', 'NAM A2 Lite', 'NAM A2 Lite', (12, 'NAM')
 # NAM_PEDAL=1 (nam_pedal.py): a second model, 'NAM Pedal', beside the NAM block (stage_model adds both). Its
-# cost is a start value (~7.7% of a DSP on the LT meter, 850 at ~100 units a 1%): measure on the unit.
+# cost measured on the unit (2026-11-18, meter build, cycles a call): 9,888 median / 12,448 worst against a NAM block's 47,272 /
+# 56,656 at cost 3250, so 680-710 by ratio; 750 leaves a margin.
 PEDAL = nam_pedal.PEDAL
-PEDAL_NAME, PEDAL_DISPLAY, PEDAL_COST, PEDAL_PID = 'HD2_AmpNAMPedal', 'NAM Pedal', int(os.environ.get("NAM_PEDAL_COST", "850")), 768
+PEDAL_NAME, PEDAL_DISPLAY, PEDAL_COST, PEDAL_PID = 'HD2_AmpNAMPedal', 'NAM Pedal', int(os.environ.get("NAM_PEDAL_COST", "750")), 768
 E555 = bool(os.environ.get("NAM_555"))     # EXPERIMENT build/EXPERIMENT-555: preset id 555, a Distortion-type item
 XENO, XENO_PID = 'HD2_DistXenomorphFuzzMono', 555
 # 555 variants (stock never pairs browser btype 1 with Table 2 class 2/3; hybrid did, and the unit dropped it):
