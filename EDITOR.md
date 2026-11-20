@@ -1,6 +1,6 @@
 # Floor firmware and editor pairing
 
-The maintained desktop companion is **[HX Edit Unbound](https://github.com/Suddl3/hx-edit-unbound)** (formerly hx-edit-nam). Its current branch is `floor-navigation`; the `floor` branch is the older source preview described below. The direct installation guide is **[FLOOR-SETUP.md](https://github.com/Suddl3/hx-edit-unbound/blob/floor-navigation/docs/FLOOR-SETUP.md)**.
+The maintained desktop companion is **[HX Edit Unbound](https://github.com/Suddl3/hx-edit-unbound)** (formerly hx-edit-nam). Its current branch is `main`; the `floor` branch is the older source preview described below. The direct installation guide is **[FLOOR-SETUP.md](https://github.com/Suddl3/hx-edit-unbound/blob/main/docs/FLOOR-SETUP.md)**.
 
 We keep the firmware here and desktop workflow there. That lets Suddl3 and savedadodo (Red Dragon) preserve the Floor's tested workflow while reviewing upstream features on their merits. We continue crediting the source projects and contributing useful fixes upstream. A fork is a maintained integration boundary, not a claim to have written the underlying editor or NAM engine.
 
