@@ -27,7 +27,7 @@ def test_emulator_script(name):
     assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
 
 
-@pytest.mark.parametrize("script", ["test_bg_store.py", "test_picture_store_doc.py"])
+@pytest.mark.parametrize("script", ["test_bg_store.py", "test_picture_store_doc.py", "test_store_input.py"])
 def test_background_store(script):
     pytest.importorskip("PIL")
     r = run(script)
