@@ -1,5 +1,5 @@
 """Unicorn (Cortex-M4) test of m4/unbound_info.bin (unbound_info.py): the registrations through the trampoline (alone and
-with the screen mirror's fm_regall), command 0x53's reply, the table's MessagePack and the build placing. Firmware
+with the screen mirror's fm_regall), command 0x4f's reply, the table's MessagePack and the build placing. Firmware
 functions are Python stubs at their Floor addresses. Needs unicorn. usage: python test_unbound_info.py"""
 import os
 import struct
@@ -134,7 +134,7 @@ except ImportError:
 assert unbound_info.pack({"feat": ["focus", "art"]})[-14:] in unbound_info.table(blocks, {"NAM_EMMC_ART": "1"})   # implied focus
 assert unbound_info.table([(380, 3600)], {}) == unbound_info.pack({"fmt": 1, "blocks": [[380, 3600]], "feat": []})
 
-# alone: the stock registrations run (A, B, then the rest), then 0x53 with {ui_cmd, NO_PARAMS, 0}
+# alone: the stock registrations run (A, B, then the rest), then 0x4f with {ui_cmd, NO_PARAMS, 0}
 module = unbound_info.build(BASE, blocks, None, ENV)
 assert len(module) % 4 == 0 and module[:len(code)] != code          # ui_impl and ui_len are filled in
 assert struct.unpack_from("<2I", module, syms["ui_impl"]) == ((BASE + syms["ui_stock"]) | 1, len(tab))
@@ -143,7 +143,7 @@ mu, call, st = machine(module)
 assert call(BASE + syms["ui_regall"]) == 0
 names = [x for x in st["log"] if isinstance(x, str)]
 assert names[:3] == ["REGALL_A", "REGALL_B", "REGALL_REST"], names
-assert registered(st["log"]) == [(0x53, ((BASE + syms["ui_cmd"]) | 1, STUB["NO_PARAMS"] | 1, 0))], registered(st["log"])
+assert registered(st["log"]) == [(0x4f, ((BASE + syms["ui_cmd"]) | 1, STUB["NO_PARAMS"] | 1, 0))], registered(st["log"])
 
 # the reply: {0x66: seq, 0x67: 0} head, then one message {u16 0, u16 6, u32 n} + the head's bytes + the table
 req = 0x20003000
@@ -156,14 +156,14 @@ assert not [x for x in log if isinstance(x, tuple) and x[0] == "wwrite"]
 m = bytes(st["out"])
 assert m == struct.pack("<HHI", 0, 6, len(pfx) + len(tab)) + pfx + tab, m.hex()
 
-# with the screen mirror: its fm_regall runs the registrations and registers 0x52, 0x51, 0x50; then 0x53
+# with the screen mirror: its fm_regall runs the registrations and registers 0x52, 0x51, 0x50; then 0x4f
 msyms = screen_mirror.load()[1]
 module = unbound_info.build(BASE, blocks, MIRROR + msyms["fm_regall"], ENV)
 assert struct.unpack_from("<I", module, syms["ui_impl"])[0] == (MIRROR + msyms["fm_regall"]) | 1
 mu, call, st = machine(module, mirror=True)
 assert call(BASE + syms["ui_regall"]) == 0
 cmds = [c for c, _ in registered(st["log"])]
-assert cmds == [0x52, 0x51, 0x50, 0x53], cmds
+assert cmds == [0x52, 0x51, 0x50, 0x4f], cmds
 assert [x for x in st["log"] if isinstance(x, str)][:3] == ["REGALL_A", "REGALL_B", "REGALL_REST"]
 
 
@@ -198,4 +198,4 @@ except AssertionError as e:
     assert "mirror's trampoline" in str(e)
 
 unbound_info.assemble(check=True) if "--assemble-check" in sys.argv else None
-print("unbound_info: registration alone and after the mirror, 0x53 reply and table, trampoline placing: OK")
+print("unbound_info: registration alone and after the mirror, 0x4f reply and table, trampoline placing: OK")
