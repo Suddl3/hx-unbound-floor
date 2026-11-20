@@ -1,4 +1,4 @@
-@ unbound_info.s: editor command 0x53 ("which firmware am I") for HX Edit Unbound (env NAM_UNBOUND_INFO=1, unbound_info.py).
+@ unbound_info.s: editor command 0x4f ("which firmware am I") for HX Edit Unbound (env NAM_UNBOUND_INFO=1, unbound_info.py).
 @
 @ The reply's result is a MessagePack map the build writes after this code (ui_len, then the bytes): the NAM blocks' preset
 @ ids and DSP costs, the optional features and a format number, so the editor can offer the blocks this image has and
@@ -11,7 +11,7 @@
 .syntax unified
 .thumb
 
-.equ CMD, 0x53
+.equ CMD, 0x4f                   @ not 0x53: that is a stock command, registered after ours at boot
 .equ SERVICE, 6
 .equ REGISTER, 0x280ee19d           @ (command, {handler, check, 0}): the editor's command table
 .equ NO_PARAMS, 0x280f77fd          @ the check of commands without parameters (movs r0, #0; bx lr)

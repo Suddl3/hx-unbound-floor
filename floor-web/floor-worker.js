@@ -61,6 +61,7 @@ var DRIVER = [
   "sys.modules['capstone'] = None          # (listing only; not in Pyodide)",
   "os.environ.update(NAM_KERNEL='nam_floor5', NAM_MAX_BLOCKS='16', NAM_DIAG='1')   # NAM_DIAG: no simulator check",
   "os.environ['NAM_PR1'] = '0'             # the unit-tested kernel (BUILT_MD5); PR #1's patches stay opt-in here",
+  "os.environ['NAM_UNBOUND_INFO'] = '0'   # the tested bytes (BUILT_MD5) have no 0x53 module; it is on by default elsewhere",
   "def run(argv):",
   "    out = io.StringIO()",
   "    sys.argv = list(argv)",

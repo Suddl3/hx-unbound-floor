@@ -1,4 +1,4 @@
-"""Editor command 0x53 for HX Edit Unbound: which firmware this is (env NAM_UNBOUND_INFO=1, off by default).
+"""Editor command 0x4f for HX Edit Unbound: which firmware this is (on in every build; env NAM_UNBOUND_INFO=0 leaves it out).
 
 HX Edit sums each block's DSP load from its own catalog, so the editor has to know the NAM blocks this image has and
 their costs (3600 standard, 3250 with the PAIR kernel, and later the NAM Pedal block). The reply's result is a fixed
@@ -7,13 +7,13 @@ MessagePack map the build writes after the code:
     {"fmt": 1, "blocks": [[preset id, DSP cost], ...], "feat": ["mirror", "meter", ...]}
 
 `fmt` changes only when a key changes meaning; the editor ignores keys it does not know. Stock firmware and older
-builds answer 0x53 with an error status, and the editor then falls back to its own setting. auto/floor_info.py asks
+builds answer 0x4f with an error status, and the editor then falls back to its own setting. auto/floor_info.py asks
 from the PC (HX Edit closed).
 
 m4/unbound_info.s goes after segment 1's bytes (local SRAM bank 2, behind the Focus View reader and the clock-stop
 wrappers when they are built in). It owns the trampoline at the editor's command registrations (0x280ee594): it runs
 the screen mirror's fm_regall when the mirror is built in, else its own copy of the stock registrations, then registers
-0x53. Assembled with zig's clang like the mirror: `python unbound_info.py --assemble` writes m4/unbound_info.bin and
+0x4f. Assembled with zig's clang like the mirror: `python unbound_info.py --assemble` writes m4/unbound_info.bin and
 checks m4/unbound_info.json (symbol offsets); `--check` verifies both without changing them.
 """
 import json
@@ -27,8 +27,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, "m4", "unbound_info.s")
 BIN = os.path.join(HERE, "m4", "unbound_info.bin")
 SYMS = os.path.join(HERE, "m4", "unbound_info.json")
-ENABLED = os.environ.get("NAM_UNBOUND_INFO") == "1"
-CMD = 0x53
+ENABLED = os.environ.get("NAM_UNBOUND_INFO") != "0"      # on by default; NAM_UNBOUND_INFO=0 leaves it out
+CMD = 0x4f                              # stock uses 0x53; 0x50..0x52 are the mirror's
 FORMAT = 1
 REGALL = 0x280ee594
 MAX_TABLE = 200                         # the reply stays far below an editor message's size
@@ -173,7 +173,7 @@ def apply(im, code_va, blocks, mirror):
         check_stock(im)
     im.wr(REGALL, tramp(code_va + syms["ui_regall"]))
     return (f"unbound info: {code_va:#x}; {REGALL:#x} -> ldr.w pc, [pc] ; .word {(code_va + syms['ui_regall']) | 1:#x}; "
-            f"editor command 0x53, table " + table(blocks).hex())
+            f"editor command 0x4f, table " + table(blocks).hex())
 
 
 def check_stock_after_mirror(im):
