@@ -30,6 +30,20 @@ NONE = 0xFFFF
 
 
 def draw(size):
+    """The pedal's picture, RGBA size x size: NAM_PEDAL_ART=<png> (e.g. a gen_pedal_N.png from HX Edit Unbound's
+    src/nam_capture_icons) scaled to fit, else the stompbox drawn below."""
+    art = os.environ.get("NAM_PEDAL_ART")
+    if not art:
+        return draw_own(size)
+    from PIL import Image
+    im = Image.open(art).convert("RGBA")
+    im.thumbnail((size, size), Image.LANCZOS)
+    out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    out.paste(im, ((size - im.width) // 2, (size - im.height) // 2), im)
+    return out
+
+
+def draw_own(size):
     """The stompbox, RGBA size x size, transparent around it (drawn at 4x and reduced)."""
     from PIL import Image, ImageDraw, ImageFilter, ImageFont
     k = 4
