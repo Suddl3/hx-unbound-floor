@@ -1,4 +1,4 @@
-"""Editor command 0x53 for HX Edit Unbound: which firmware this is (env NAM_UNBOUND_INFO=1, off by default).
+"""Editor command 0x53 for HX Edit Unbound: which firmware this is (on in every build; env NAM_UNBOUND_INFO=0 leaves it out).
 
 HX Edit sums each block's DSP load from its own catalog, so the editor has to know the NAM blocks this image has and
 their costs (3600 standard, 3250 with the PAIR kernel, and later the NAM Pedal block). The reply's result is a fixed
@@ -27,7 +27,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, "m4", "unbound_info.s")
 BIN = os.path.join(HERE, "m4", "unbound_info.bin")
 SYMS = os.path.join(HERE, "m4", "unbound_info.json")
-ENABLED = os.environ.get("NAM_UNBOUND_INFO") == "1"
+ENABLED = os.environ.get("NAM_UNBOUND_INFO") != "0"      # on by default; NAM_UNBOUND_INFO=0 leaves it out
 CMD = 0x53
 FORMAT = 1
 REGALL = 0x280ee594

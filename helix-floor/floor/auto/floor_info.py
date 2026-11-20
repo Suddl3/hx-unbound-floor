@@ -1,4 +1,4 @@
-"""Which HX Unbound firmware runs on the Floor: editor command 0x53 (a build with NAM_UNBOUND_INFO=1, unbound_info.py).
+"""Which HX Unbound firmware runs on the Floor: editor command 0x53 (every build has it unless built with NAM_UNBOUND_INFO=0, unbound_info.py).
 Read only; nothing on the unit changes. HX Edit must be closed (this tool opens the editor service itself).
 
   floor_info.py          prints the reply, e.g. {"fmt": 1, "blocks": [[380, 3250]], "feat": ["pair", "mirror", "meter"]}
@@ -39,7 +39,7 @@ def main():
     with hx_ctl.HxCtl(pid=0x4248, timeout=10.0) as ctl:
         got = info(ctl)
     if got is None:
-        print("no answer to 0x53: stock firmware, or an HX Unbound build without NAM_UNBOUND_INFO=1")
+        print("no answer to 0x53: stock firmware, or an image built before 0x53 was on by default")
         return 1
     print(json.dumps(got))
     return 0
