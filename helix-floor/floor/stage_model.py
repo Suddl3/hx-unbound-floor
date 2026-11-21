@@ -140,6 +140,74 @@ def nam_host_blob_gr(comp_id, params):
 
 if GR_METER:
     pa.nam_host_blob = nam_host_blob_gr
+
+# NAM_PEDAL=1 (nam_pedal.py): a second NAM block, 'NAM Pedal', on the same kernel. Its graph sets the instance
+# word P_LIM to PED_TAG at creation (a member init: a constant the loader passes to the member's control handler,
+# as stock blobs set their members' constants); the kernel takes that block to the pedal model.
+# (internal name, display name, P_LIM's low byte); the first is the plain build's NAM block, presets keep it.
+PEDAL = bool(getattr(nam_floor, "PEDAL", False))
+NAM_MODELS = [("HD2_AmpNAMLite", "NAM A2 Lite", 0)] + ([("HD2_AmpNAMPedal", "NAM Pedal", 0xFE)] if PEDAL else [])
+assert not (PEDAL and (GR_METER or os.environ.get("NAM_555"))), "NAM_PEDAL excludes NAM_GR_METER and NAM_555"
+_CONSTS = []                               # (pid, word): what the next nam_host_blob adds as member inits
+
+
+def nam_host_blob(comp_id, params):
+    """Upstream's, plus a member init (kind 2, member 1) for each of _CONSTS."""
+    consts = list(_CONSTS)
+    n, m = len(params), 2 * len(params) + len(consts)
+    a_off = 0x18
+    data_off = a_off + 10 * 2 * n
+    c_off = data_off + 3 * n
+    d_off = c_off + 4 * n
+    e_off = d_off + 4 * n
+    end = e_off + 4 * n
+    pm = [a_off, 0, c_off, 0, c_off, 0, d_off, 0, e_off, 0, end, 0]
+    pm += [5 * n, 2 * n, 3 * n, 3 * n, n, n]
+    pm += [2 * n, 0, n, n, n, 0]
+    for k, p in enumerate(params):
+        pm += [data_off, 0, k, p['op'], 1, 2, 0, 0, 1, 0]
+    for k in range(n):
+        pm += [data_off + 3 * k, 0, n + k, 1, 0, 3, 3, 3, 0, 0]
+    for p in params:
+        pm += [0x0e, p['pid'], 1]
+    for k in range(n):
+        pm += [k, n + k, 0, 0]
+    for k, p in sorted(enumerate(params), key=lambda kp: kp[1]['slot']):
+        pm += [k, k, p['slot'], 0]
+    for k in range(n):
+        pm += [k, k, k, 0]
+    assert len(pm) == end
+    v0 = 0x10
+    tree = v0 + 2 * m
+    pmo = tree + 4
+    pin = pmo + len(pm)
+    ini = pin + 4 * m
+    sub = ini + 2 * (n + m)
+    b = [3, 2, tree, 1, ini, n + m, pmo, len(pm), sub, 0, pin, m]
+    b += [1, 0, 1, 2]
+    for p in params + params:
+        b += [1, p['default_word']]
+    for _, w in consts:
+        b += [1, w]
+    b += [0, comp_id, 0, 0]
+    b += pm
+    for k, p in enumerate(params):
+        b += [0x0c, p['slot'], v0 + 2 * k, 1]
+    for k, p in enumerate(params):
+        b += [0x0e, p['pid'], v0 + 2 * (n + k), 2]
+    for j, (pid, _) in enumerate(consts):
+        b += [0x0e, pid, v0 + 2 * (2 * n + j), 2]
+    for k in range(n):
+        b += [1, pmo + data_off + 3 * k]
+    for k in range(m):
+        b += [1, pin + 4 * k]
+    assert len(b) == sub
+    return b
+
+
+_upstream_blob = pa.nam_host_blob
+if PEDAL:
+    pa.nam_host_blob = nam_host_blob
 add_model_entry3 = _floor_copy(pa.add_model_entry3)
 add_model_entry4 = _floor_copy(pa.add_model_entry4)
 if GR_METER:                                    # + meta gainReductionMeterCount '1' (a string record, as stock)
@@ -184,11 +252,24 @@ def main():
         nam = spec555.nam_params(e_db, info)
     else:
         nam = pa.nam_params(e_db, info)
-    new_gl, blob_idx, comp = add_model_entry4(e_gl, clarity['blob_index'], nam, SDRAM_WORDS)
+    if PEDAL:
+        import nam_pedal
+        _CONSTS.clear()
+        assert nam_host_blob(0x600123, nam) == _upstream_blob(0x600123, nam), "nam_host_blob differs from upstream's"
+        new_gl, new_db0, added = e_gl, e_db, []
+        for name, disp, lim in NAM_MODELS:
+            _CONSTS[:] = [(nam_pedal.P_LIM, nam_pedal.LIM_TAG | lim)]
+            new_gl, blob_idx, comp = add_model_entry4(new_gl, clarity['blob_index'], nam, SDRAM_WORDS)
+            new_db0, model_id, lists = add_model_entry3(new_db0, clarity, name, disp, blob_idx, nam)
+            added.append((disp, model_id, blob_idx, comp))
+        new_db = new_db0
+    else:
+        new_gl, blob_idx, comp = add_model_entry4(e_gl, clarity['blob_index'], nam, SDRAM_WORDS)
     # 555 "fx" variant: the model DB record (category distortion, its group lists) is Xenomorph's, as
     # upstream's add-fx-model; the composite stays Clarity's copy (amp-size instance memory)
     db_src = pa.find_model(info, 'HD2_DistXenomorphFuzzMono') if os.environ.get("NAM_555_VARIANT") == "fx" else clarity
-    new_db, model_id, lists = add_model_entry3(e_db, db_src, 'HD2_AmpNAMLite', 'NAM A2 Lite', blob_idx, nam)
+    if not PEDAL:
+        new_db, model_id, lists = add_model_entry3(e_db, db_src, 'HD2_AmpNAMLite', 'NAM A2 Lite', blob_idx, nam)
     e2 = data[ents[E_E2]['payload_off']: ents[E_E2]['payload_off'] + ents[E_E2]['payload_len']]
     new_e2, rep = expand_blob0(e2)
     # checks: the new Blob 0 as the SHARC would relocate it, and the new model as parsed back
@@ -198,13 +279,18 @@ def main():
     err = pa.sharc_blob0_check(b0, BLOB0_CAP)
     assert err is None, err
     chk = pa.parse_entry3_full(new_db)
-    assert len(chk['models']) == N_MODELS + 1 and chk['models'][-1]['name'] == 'HD2_AmpNAMLite'
+    assert [m['name'] for m in chk['models'][N_MODELS:]] == [n for n, _, _ in NAM_MODELS]
     assert all(a['words'] == b['words'] or a['off'] != b['off'] or True for a, b in zip(info['models'], chk['models']))
     assert [(a['name'], a['model_id'], a['blob_index']) for a in info['models']] == \
         [(a['name'], a['model_id'], a['blob_index']) for a in chk['models'][:N_MODELS]], "a stock model changed"
     img, _, _ = l6ia.rebuild_archive(data, {E_E2: l6ia.swap32(new_e2), E_DB: new_db, E_GL: new_gl})
     open(out, 'wb').write(img)
-    print(f"model DB: 'NAM A2 Lite' = model {model_id} on blob {blob_idx}, in browser groups {lists}")
+    if PEDAL:
+        for disp, mid, bidx, cmp_ in added:
+            print(f"model DB: '{disp}' = model {mid} on blob {bidx}, host composite {cmp_:#x}")
+        print(f"NAM Pedal: P_LIM (instance word {nam_pedal.P_LIM}) = {nam_pedal.PED_TAG:#x} set by its graph")
+    else:
+        print(f"model DB: 'NAM A2 Lite' = model {model_id} on blob {blob_idx}, in browser groups {lists}")
     print(f"graph library: host composite {comp:#x} (a copy of 0x6001aa), member 1 = primitive {HOOK_ID:#x}; "
           f"Blob 0 {BLOB0_STOCK:#x} -> {len(b0):#x} words (cap {BLOB0_CAP:#x}), SHARC relocation check OK")
     for line in rep:

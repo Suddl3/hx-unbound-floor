@@ -27,6 +27,8 @@ def main():
     if not argv:
         sys.exit(__doc__)
     stock = os.path.abspath(argv[0])
+    if os.environ.get("NAM_PEDAL") == "1" and not (os.environ.get("NAM_PAIR") == "1" and os.environ.get("NAM_NOSENT") == "1"):
+        sys.exit("NAM_PEDAL=1 needs the PAIR kernel layout: set NAM_PAIR=1 and NAM_NOSENT=1 too (without them the pedal's code does not fit)")
     assert hashlib.md5(open(stock, "rb").read()).hexdigest() == bf.STOCK_MD5, "not the stock Floor 3.80.0 file"
     out = os.path.abspath(argv[argv.index("-o") + 1]) if "-o" in argv else \
         os.path.join(ROOT, "build", "Helix_Floor_v3.80.0_NAM2_PERSONAL.hxf")

@@ -32,6 +32,7 @@ var SOURCES = [
   "helix-floor/floor/nam_floor2.py",
   "helix-floor/floor/nam_floor3.py",
   "helix-floor/floor/nam_floor5.py",
+  "helix-floor/floor/nam_pedal.py",
   "helix-floor/floor/stage_slots.py",
   "helix-floor/floor/stage_slots2.py",
   "helix-floor/floor/stage_model.py",
