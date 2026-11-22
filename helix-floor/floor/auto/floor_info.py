@@ -1,4 +1,4 @@
-"""Which HX Unbound firmware runs on the Floor: editor command 0x53 (a build with NAM_UNBOUND_INFO=1, unbound_info.py).
+"""Which HX Unbound firmware runs on the Floor: editor command 0x4f (every build has it unless built with NAM_UNBOUND_INFO=0, unbound_info.py).
 Read only; nothing on the unit changes. HX Edit must be closed (this tool opens the editor service itself).
 
   floor_info.py          prints the reply, e.g. {"fmt": 1, "blocks": [[380, 3250]], "feat": ["pair", "mirror", "meter"]}
@@ -12,7 +12,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "hx"))
 import hx_ctl  # noqa: E402
 
-CMD = 0x53
+CMD = 0x4f                              # the stock firmware uses 0x53
 
 
 def text(value):
@@ -26,7 +26,7 @@ def text(value):
 
 
 def info(ctl):
-    """The reply's map, or None when the firmware has no command 0x53."""
+    """The reply's map, or None when the firmware has no command 0x4f."""
     try:
         return text(ctl.ed.request(CMD))
     except hx_ctl.HxError as error:
@@ -39,7 +39,7 @@ def main():
     with hx_ctl.HxCtl(pid=0x4248, timeout=10.0) as ctl:
         got = info(ctl)
     if got is None:
-        print("no answer to 0x53: stock firmware, or an HX Unbound build without NAM_UNBOUND_INFO=1")
+        print("no answer to 0x4f: stock firmware, or an image built before 0x4f was on by default")
         return 1
     print(json.dumps(got))
     return 0
