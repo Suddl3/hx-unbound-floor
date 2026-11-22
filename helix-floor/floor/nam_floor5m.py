@@ -144,10 +144,13 @@ _kernel_src = n5.kernel_src
 def kernel_src():
     src = _kernel_src()
     pats = list(PATCHES_M)
+    if getattr(n5, "PEDAL", False):       # (PEDAL already took the R_DMAC / R_ICEP / R_CLAIMS stores out)
+        pats = [p for p in pats if "R_DMAC" not in p[0] and "R_ICEP" not in p[0] and "R_CLAIMS" not in p[0]]
     if n5.P9_MODE == "nomask":            # (no x_nomsk: the meter goes after the exit's idle wait)
         body = pats[1][1]
         assert body.startswith("x_nomsk:\n")
-        pats[1] = ("x_idle:\n    R0 = DM(SAVE + 1);", "x_idle:\n" + body[len("x_nomsk:\n"):] + "    R0 = DM(SAVE + 1);")
+        first = "    I4 = SAVE + 1;" if getattr(n5, "PEDAL", False) else "    R0 = DM(SAVE + 1);"   # (PEDAL: packed saves)
+        pats[1] = ("x_idle:\n" + first, "x_idle:\n" + body[len("x_nomsk:\n"):] + first)
     for a, b in pats:
         assert src.count(a) == 1, a[:70]
         src = src.replace(a, b)

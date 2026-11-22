@@ -89,6 +89,17 @@ because it does not know the custom model. The [Floor editor preview](../EDITOR.
 the normal ID 380 NAM block; this does not make stock backup/restore lossless or cover every
 experimental model layout. Keep independent NAM-preserving records and check the pairing guide.
 
+## NAM Pedal (experimental, off by default)
+
+`NAM_PEDAL=1` adds a second model, **NAM Pedal**, beside NAM A2 Lite: a cheap pedal model (FIR, curve, FIR, curve, FIR, curve, FIR; 627 words, no DMA, two taps at a time on both processing elements: 9,888 cycles a call on the unit against 47,272 for a NAM block). The kernel side is `floor/nam_pedal.py`; the build adds the model, a Table 1/2 row (preset id 768 if free, cost 750, `NAM_PEDAL_COST` to change it), browser items and the IR-name title.
+
+- **Needs the PAIR layout** (`NAM_PAIR=1 NAM_NOSENT=1`): on the pinned non-PAIR kernel (f4338695) the pedal is 90 words over the code room. A pedal build is a separate image, not the pinned one. With PAIR the NAM block's cost is nearer 3250 than the default 3600 (`NAM_DSP_COST`).
+- Excludes `NAM_GR_METER` and `NAM_555`. The pedal counts as an amp for the two-amps-per-DSP limit, and has to: the stock firmware counts type-0x11 blocks itself and its instance (1418 DM + 446 PM words) needs one of the DSP's two big slots; exempting it would mean shrinking its instance to a normal slot and patching Line 6's own counter, so each DSP holds two amp-type blocks (two NAM, NAM + pedal, or two pedals). Tested on the unit: two NAM on DSP 0 + the pedal on DSP 1 loads and plays (30 s steady; the preset blob has one block list per DSP); three amp-type blocks on one DSP are refused.
+- The block is told apart by the instance word `P_LIM` (16) = `0x4E4C00FE`, set by the pedal's graph at creation. A pedal block refuses NAM captures and a NAM block refuses pedal models (silence), by the model's word count in IR word 4.
+- Test: `floor/test_nam_pedal.py` (bit-exact against `ped_ref`, refusals both ways, NAM blocks unchanged). Build: `NAM_PEDAL=1 NAM_PAIR=1 NAM_NOSENT=1 NAM_PR1=0 python floor/build_floor2.py <stock.hxf> -o <out>`.
+- With `NAM_LB_B0=2` placement (your installed FOCUS27 build) the pedal build lets the block chains fall back to R3, and `NAM_SCREEN_MIRROR` puts the mirror module after segment 1 (the seg0 cave is full otherwise).
+- Unit test (2026-11-17, FOCUS27 flags + pedal, `FOCUS28_NAMPEDAL`): NAM block unchanged, pedal block plays a pedal model (level within 0.3 dB of `ped_ref`, odd harmonics only), refuses NAM captures and NAM blocks refuse pedal models, NAM + pedal on one DSP steady for 30 s. Cost measured on the unit (cycles a call, median / worst): 9,888 / 12,448 against 47,272 / 56,656 for a NAM block at cost 3250, so the default cost is 750 (`NAM_PEDAL_COST`). The pedal's own pictures (an original stompbox: big picture for Focus View, 36 px icon for the chain view) are appended to the existing stores by `floor/auto/pedal_picture.py` (about 130 KB, no full store rewrite; `--preview DIR` writes the PNGs, `--dry-run` reads only); power cycle afterwards.
+
 ## Layout
 
 | Folder | What |
