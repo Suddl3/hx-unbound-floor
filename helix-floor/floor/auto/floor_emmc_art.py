@@ -190,7 +190,7 @@ NAM_ICONS = os.environ.get("NAM_CAPTURE_ICONS", "")   # a clone of Suddl3/hx-edi
 
 
 # NAM_ICON_PIX: a folder of the pictures themselves instead of nam_capture_icons/ (e.g. the 256/ folder of Suddl3's nam-gear-art.zip,
-# release gear-art-2026-11-16; same ids as the file names there). The picking rules still come from NAM_CAPTURE_ICONS.
+# release gear-art-2026-11-22, the pictures without the floor shadow; same ids as the file names there). The picking rules still come from NAM_CAPTURE_ICONS.
 
 
 def editor_code(folder):
