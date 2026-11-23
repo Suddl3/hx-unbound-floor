@@ -23,7 +23,7 @@ FOCUS_IMG = bytes.fromhex("e0b58ab0")       # focus_img's first two instructions
 SITE = bytes.fromhex("9b780bb1")            # ldrb r3, [r3, #2]; cbz r3, +6: Focus View's test at the end of dm_paint
 PAINT_CALL = re.compile(rb"\xdf\xf8.[\x30-\x3f]\x98\x47\x20\x90\x00\x26", re.S)  # ldr.w r3, [pc, #x]; blx r3; str r0, [sp, #0x80]; movs r6, #0
 END = 0x10092000
-HOOK, IMG, LIT = 0x000, 0x540, 0x800        # fe_hook, fe_img and the literals in the module (m4/focus_emmc.s .org's)
+HOOK, IMG, LIT = 0x000, 0x540, 0x880        # fe_hook, fe_img and the literals in the module (m4/focus_emmc.s .org's)
 PRE, PRE_RET = 0xA00, 0x9F0                 # fe_pre (Focus View's exit cleanup) and the word holding its return address
 
 

@@ -13,6 +13,7 @@ the page. The test vectors at the bottom are checked by `test_picture_store_doc.
 |---|---|---|---|
 | Picture store | `0x400000` | `floor_emmc_art.py write SIZE [--scenes DIR --assign JSON [--theme JSON]]` | gear pictures for Focus View, composited on their backgrounds, plus the header that maps models to pictures and backgrounds to models |
 | Icon store | `0x440000` | `floor_emmc_art.py icons` | 36 px (up to 44 px) pictures for the block frames in the signal-flow view, one per NAM capture slot |
+| Scene table | `0x45fffe` (2 sectors) | `floor_emmc_art.py stored` | which scene each stored preset (setlist x 128 + preset) shows behind its gear |
 | Background store | `0x460000` | `floor_emmc_art.py write --scenes` | the scenes: 288 rows of 800 pixels each, 900 sectors a scene |
 
 The picture store may grow up to the icon store; `write` refuses when it would. The backgrounds must end before sector
@@ -36,7 +37,7 @@ The picture store may grow up to the icon store; `write` refuses when it would. 
 | 3072 | u16 x N | set B: `map[preset id]` (theme pack) |
 | 5072 | u8 x N | set B: `slot[preset id]` |
 
-A picture is S x S RGB555 pixels (bit 15 unused; red in bits 14-10, green 9-5, blue 4-0), rows from the top, each picture
+A picture is S x S RGB555 pixels (red in bits 14-10, green 9-5, blue 4-0; **bit 15 set = see-through**: the firmware leaves the pixel as it is, which is the scene behind the gear), rows from the top, each picture
 starting on a whole sector: `ceil(S * S * 2 / 512)` sectors. Picture k is at `first + k * sectors`.
 
 The pictures are stored **already composited** on the crop of the background they are shown on (the firmware copies
@@ -63,6 +64,31 @@ before it reads (magic, count, slot, rows, sectors); a bad header draws no backg
 Assignment JSON (the input of `write --assign`): `{"scenes": [names in slot order], "default": name or null, "category":
 {HX Edit category: name}, "preset": {model symbol: name}}`; `preset` wins over `category`. `auto/assign_default.json` is
 the default look.
+
+## Per-preset scenes (the scene table)
+
+Each preset can name its own scene, so a background follows the preset (and moves with it when presets are reordered). The
+table is **2 sectors at `0x45fffe`**, read once into free SDRAM at the first Focus View paint (a power cycle applies a change):
+
+| Offset | Size | Field |
+|---|---|---|
+| 0 | 4 | `"HXSB"` |
+| 4 | u16 | N, the number of entries (at most 1016) |
+| 6 | u16 | spare, 0 |
+| 8 | u8 x N | `scene[stored preset]` = background index (a slot of the background section), `0xff` none |
+
+The index is the 32-bit word at `0x281ee64c`, **setlist x 128 + preset** (both 0-based; setlist 1, preset 1 is 129). An entry
+that is `0xff`, an index past N, a wrong magic, a failed read, or a scene index past the background count: that preset uses its
+model's own scene as before. A store without a background section draws no background at all. The editor's assignment JSON
+carries it as `"stored": {"<setlist x 128 + preset>": "<scene name>"}` beside `category` and `preset`; precedence: `stored`,
+then `preset` (the model), then `category`, then `default`.
+
+### See-through gear
+
+A scene that differs from the model's own would show a box around a gear picture that was stored composited on its model's
+scene. `floor_emmc_art.py write ... --cutout` (or `backgrounds.cutout: true` in the editor's file) stores each gear picture
+alone, with bit 15 set on every pixel whose alpha is below 128; the firmware skips those pixels. Edges are hard (no
+anti-aliasing against the scene). A store written without `--cutout` is drawn exactly as before.
 
 ## Icon store header (10 sectors at `0x440000`)
 
@@ -110,3 +136,11 @@ NAM table for NAM preset id 380, capture slot 2 -> picture 1, others none:
 ```
 7d01 000000000000 ffff 0100 ffff ffff
 ```
+
+Scene table for `{"0": "neon_rain", "5": "synthwave", "129": "dusk"}` with scenes `[synthwave, neon_rain, dusk]` (first 16
+bytes; N = 130, scene 1 at stored preset 0, scene 0 at 5):
+
+```
+48585342 8200 0000 01ffffffff00ffff
+```
+

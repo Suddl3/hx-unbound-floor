@@ -26,7 +26,9 @@ Assignment (a JSON file, what HX Edit or the owner edits):
      "category": {"Amp": "neon_rain"},                by HX Edit's category: amp, cab, preamp, distortion, dynamics, eq,
                                                       modulation, delay, reverb, pitch (pitchsynth), filter, wah, looper...
                                                       (case-insensitive; `python bg_store.py categories` lists them)
-     "preset": {"HD2_AmpEssexA30": "synthwave"}}      by model symbol (Helix.sym); wins over the category
+     "preset": {"HD2_AmpEssexA30": "synthwave"},      by model symbol (Helix.sym); wins over the category
+     "stored": {"0": "synthwave", "129": "neon_rain"}} by the stored preset the Floor is on: setlist * 128 + preset, both from 0,
+                                                      as a decimal string; wins over everything above (see stored_table)
 The scene PNGs are Suddl3/hx-edit-unbound src/focus_backgrounds/backgrounds (800 x 480; rows above FRAME_Y0 and below
 FRAME_Y0 + ROWS are black there anyway).
 """
@@ -149,6 +151,45 @@ def background_bytes(scene):
     """One background's sectors (zero padded)."""
     data = rgb555(scene, 0, Y0)
     return data + bytes(sectors_per_bg() * 512 - len(data))
+
+
+STORED_SEC = 0x45FFFE           # the per-preset scene table: 2 sectors just before the backgrounds (m4/focus_emmc.s fe_stored)
+STORED_MAX = 1016               # entries it holds: "HXSB", u16 N, u16 spare, then u8 scene[N] (0xff: none), 1024 bytes in all
+STORED_MAGIC = b"HXSB"
+
+
+def stored_table(stored, names):
+    """The 1024 bytes at STORED_SEC. stored = {"<setlist * 128 + preset>": scene name}; names = the scenes in slot order (the
+    assignment's own, then a theme pack's extra ones, as floor_emmc_art.build orders them). N is the highest key + 1. A scene
+    that is not in names, or a key that is not a number in 0..STORED_MAX - 1, is an error (never silently dropped)."""
+    entries = {}
+    for key, name in (stored or {}).items():
+        if not str(key).isdigit() or not 0 <= int(key) < STORED_MAX:
+            raise SystemExit(f"stored preset {key!r}: setlist * 128 + preset as a number in 0..{STORED_MAX - 1} is expected")
+        if name not in names:
+            raise SystemExit(f"stored preset {key}: scene {name!r} is not one of the scenes {list(names)}")
+        entries[int(key)] = names.index(name)
+    n = max(entries) + 1 if entries else 0
+    body = bytes(entries.get(i, 0xFF) for i in range(n))
+    out = STORED_MAGIC + struct.pack("<HH", n, 0) + body
+    return out + bytes(1024 - len(out))
+
+
+def cutout(gear, size):
+    """The gear picture at size x size as RGB555 with bit 15 set on every see-through pixel (alpha below 128): the firmware
+    leaves the background there (a hard edge) so one picture sits on any scene. Opaque pixels keep their own colour."""
+    from PIL import Image
+    g = gear.convert("RGBA").resize((size, size), Image.LANCZOS)
+    px = g.load()
+    out = bytearray()
+    for y in range(size):
+        for x in range(size):
+            r, gg, b, a = px[x, y]
+            if a < 128:
+                out += struct.pack("<H", 0x8000)
+            else:
+                out += struct.pack("<H", (r >> 3) << 10 | (gg >> 3) << 5 | b >> 3)
+    return bytes(out)
 
 
 def composite(scene, gear, size):

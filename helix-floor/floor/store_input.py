@@ -7,7 +7,7 @@ so the tool imports no editor code and reads no editor memory file. Pure Python,
       "format": 1,
       "pictures": {"size": 256, "models_dir": "<folder with HX Edit's picture file names, or null: HX Edit's own res>"},
       "backgrounds": {"scenes_dir": "<folder of <name>.png, 800 x 480>",
-                      "assign": {"scenes": [], "default": null, "category": {}, "preset": {}}, "theme": null},
+                      "assign": {"scenes": [], "default": null, "category": {}, "preset": {}, "stored": {}}, "theme": null},
       "nam": {"preset_ids": [380], "slots": {"1": {"picture": "<png>", "icon": "<png>"}, "2": {"picture": "<png>"}}},
       "icons": {"size": 36}
     }
@@ -47,7 +47,8 @@ def _assign(value, what):
     if not isinstance(value, dict) or not isinstance(value.get("scenes"), list):
         raise StoreInputError(f"{what}: an assignment {{scenes: [...], default, category, preset}} is expected")
     out = {"scenes": [str(x) for x in value["scenes"]], "default": value.get("default"),
-           "category": dict(value.get("category") or {}), "preset": dict(value.get("preset") or {})}
+           "category": dict(value.get("category") or {}), "preset": dict(value.get("preset") or {}),
+           "stored": {str(k): v for k, v in dict(value.get("stored") or {}).items()}}
     return out
 
 
@@ -62,7 +63,7 @@ def normalize(obj, check_files=True):
     bg = obj.get("backgrounds") or {}
     nam = obj.get("nam") or {}
     out = {"size": None, "models_dir": None, "scenes_dir": None, "assign": None, "theme": None, "nam_pid": None,
-           "nam": {}, "icon_size": None}
+           "nam": {}, "icon_size": None, "cutout": False}
     if pic.get("size") is not None:
         out["size"] = _size(pic["size"], "pictures.size", MAX_PICTURE_SIZE)
     if pic.get("models_dir") is not None:
@@ -74,6 +75,10 @@ def normalize(obj, check_files=True):
         out["assign"] = _assign(bg["assign"], "backgrounds.assign")
         if bg.get("theme") is not None:
             out["theme"] = _assign(bg["theme"], "backgrounds.theme")
+        if bg.get("cutout") is not None:
+            if not isinstance(bg["cutout"], bool):
+                raise StoreInputError("backgrounds.cutout must be true or false")
+            out["cutout"] = bg["cutout"]
     elif bg.get("assign") is not None or bg.get("theme") is not None:
         raise StoreInputError("backgrounds.assign / theme need backgrounds.scenes_dir")
     ids = nam.get("preset_ids")

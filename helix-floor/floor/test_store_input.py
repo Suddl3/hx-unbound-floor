@@ -9,7 +9,7 @@ import store_input as si
 POSTED = {                      # the shape posted on issue #10, paths made up (not checked here)
     "format": 1,
     "pictures": {"size": 256, "models_dir": "/models"},
-    "backgrounds": {"scenes_dir": "/scenes", "assign": {"scenes": ["synthwave"], "default": "synthwave", "category": {}, "preset": {}},
+    "backgrounds": {"scenes_dir": "/scenes", "assign": {"scenes": ["synthwave"], "default": "synthwave", "category": {}, "preset": {}, "stored": {}},
                     "theme": None},
     "nam": {"preset_ids": [380], "slots": {"1": {"picture": "/p1.png", "icon": "/i1.png"}, "2": {"picture": "/p2.png"}}},
     "icons": {"size": 36},
@@ -27,14 +27,14 @@ def refused(obj, text):
 
 n = si.normalize(POSTED, check_files=False)
 assert n["size"] == 256 and n["models_dir"] == "/models" and n["scenes_dir"] == "/scenes" and n["theme"] is None
-assert n["assign"] == {"scenes": ["synthwave"], "default": "synthwave", "category": {}, "preset": {}}
+assert n["assign"] == {"scenes": ["synthwave"], "default": "synthwave", "category": {}, "preset": {}, "stored": {}}
 assert n["nam_pid"] == 380 and n["icon_size"] == 36
 assert n["nam"] == {1: {"picture": "/p1.png", "icon": "/i1.png"}, 2: {"picture": "/p2.png", "icon": None}}, n["nam"]
 
 # only the format key: every default stays the tool's
 e = si.normalize({"format": 1}, check_files=False)
 assert e == {"size": None, "models_dir": None, "scenes_dir": None, "assign": None, "theme": None, "nam_pid": None, "nam": {},
-             "icon_size": None}, e
+             "icon_size": None, "cutout": False}, e
 
 # the pedal can share the table later: the first id is the one used today; unknown keys are ignored
 n = si.normalize({"format": 1, "nam": {"preset_ids": [380, 768]}, "future": {"x": 1}}, check_files=False)
