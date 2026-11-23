@@ -213,6 +213,7 @@ NAM_PID = 380                   # the NAM A2 Lite block's preset id on this firm
 NAM_ICONS = os.environ.get("NAM_CAPTURE_ICONS", "")   # a clone of Suddl3/hx-edit-unbound (formerly hx-edit-nam)
 
 
+# HX_ART_DIR: HX Edit Unbound's own 3D gear instead of HX Edit's pictures: auto/hxart_from_pack.py makes the folder from the release's helix-gear-art.zip.
 # NAM_ICON_PIX: a folder of the pictures themselves instead of nam_capture_icons/ (e.g. the 256/ folder of Suddl3's nam-gear-art.zip,
 # release gear-art-2026-11-22, the pictures without the floor shadow; same ids as the file names there). The picking rules still come from NAM_CAPTURE_ICONS.
 
