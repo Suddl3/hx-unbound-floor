@@ -76,6 +76,13 @@ def main():
         bf.run(os.path.join(HERE, "stage_art.py"), s4, s4 + ".art", art, os.environ.get("NAM_ART_SIZE", "128"))
         os.replace(s4 + ".art", s4)
         os.replace(s4 + ".art.art.json", out + ".art.json")
+    if os.environ.get("NAM_DSP_OPT") == "1":     # nocaseguy's bit-exact DSP rewrites at the Floor's addresses (dsp_opt_port.py, DSP_OPT.md)
+        extra = []
+        for name, flag in (("NAM_DSP_OPT_ONLY", "--only"), ("NAM_DSP_OPT_WITHOUT", "--without")):
+            if os.environ.get(name):
+                extra += [flag, os.environ[name]]
+        bf.run(os.path.join(HERE, "stage_dsp_opt.py"), s4, s4 + ".opt", os.path.join(HERE, "dsp_opt_floor.json"), *extra)
+        os.replace(s4 + ".opt", s4)
     # (the partition guard runs inside floor_hxf.pack below and prints its table into this log)
     rep = bf.report(s0, s4)
     print(rep)
