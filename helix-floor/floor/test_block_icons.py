@@ -271,4 +271,18 @@ st["ids"] = {1: 3}
 widget(0, 0, 10, 103, 126)
 run()
 assert len(st["reads"]) > 1, st["reads"]
-print("block icons: block ids, 48 x 48 frames only, map, bypassed frames halved, blanked ring, cache, focus view, no store, bounds: OK")
+# the block lifted with the Action button: the stock draws it as a 52 x 68 move frame (its frame the top 52 rows) on the same
+# centre; the picture goes in 8 px above that centre, with no outline recolour and no second border. Other sizes stay untouched.
+mu, st, widget, run = machine()
+st["ids"] = {1: 3, 2: 9, 3: 7}
+st["sel"] = 1                                                        # the lifted block is also the selected one
+st["frames"] = []
+widget(0, 0, 7, 103, 126, w=52, h=68)                                # block id 1 -> preset 3 -> picture 2, the move frame
+widget(0, 1, 7, 188, 126, w=52, h=52)                                # 52 x 52: not a block frame, untouched
+widget(0, 2, 7, 273, 126, w=48, h=68)                                # 48 x 68: untouched
+fb = run()
+drawn(fb, 103, 126 - 8, 0x30)                                        # picture 2, 8 px above the centre
+assert not any(fb[((126 - 3) * 800 + 188 - 3) * 2:][:6])
+assert not any(fb[((126 - 3) * 800 + 273 - 3) * 2:][:6])
+assert px(fb, 103 - 26, 126 - 8) == (0, 0, 0) and px(fb, 103, 126 - 8 - 26) == (0, 0, 0)    # no second white border
+print("block icons: block ids, 48 x 48 frames only, the lifted block's move frame, map, bypassed frames halved, blanked ring, cache, focus view, no store, bounds: OK")

@@ -157,11 +157,18 @@ fh_loop:
     cmp r0, #0
     beq fh_next                     @ hidden
     ldr r0, [r8, #0x14]
+    ldr r1, [r8, #0x18]
     cmp r0, #48
+    bne fh_mvchk
+    cmp r1, #48
     bne fh_next
-    ldr r0, [r8, #0x18]
-    cmp r0, #48
-    bne fh_next                     @ not a block frame (the move frames, the splits, the inputs and outputs)
+    b fh_isblk
+fh_mvchk:
+    cmp r0, #52
+    bne fh_next
+    cmp r1, #68
+    bne fh_next                     @ not a block frame (the splits, the inputs and outputs). 52 x 68: the move frame the stock draws for
+fh_isblk:                           @ the block lifted with the Action button (the frame is its top 52 rows): the model's picture goes in too
     ldr r9, [r8]                    @ its image index
     cmp r9, #1024
     bhs fh_next
@@ -246,6 +253,9 @@ fh_pic:
     ldr r0, [r8, #0x10]
     sub.w r0, r0, r1, asr #1
     add.w r0, r0, r2, asr #1        @ centre y
+    cmp r2, #68                     @ the lifted block's move frame: 52 x 68 centred on the slot, its frame the top 52 rows
+    it eq
+    subeq r0, r0, #8
     sub.w r1, r3, r9, lsr #1
     subs r1, #1                     @ the blanked square's left
     sub.w r2, r0, r9, lsr #1
@@ -254,8 +264,15 @@ fh_pic:
     mla r2, r2, r12, r1
     add.w r12, r4, r2, lsl #1       @ its first pixel
     str r12, [sp, #0x38]
+    ldr r0, [r8, #0x18]
+    cmp r0, #68
+    bne fh_stdfr
+    movs r1, #0                     @ the move frame: drawn as not selected, with no outline recolour and no second border (both are
+    str r1, [sp, #0x40]             @ laid out for the 48 square frame); the stock white frame stays
+    b fh_blank
+fh_stdfr:
     lsrs r2, r9, #1
-    rsb r2, r2, #23                 @ the frame (48 square) starts this many pixels before the blanked square
+    rsb r2, r2, #23                @ the frame (48 square) starts this many pixels before the blanked square
     movw r0, #1602
     mul r2, r2, r0
     sub.w r0, r12, r2               @ the frame's first pixel
@@ -278,6 +295,7 @@ fh_noring:
     ldr r0, [sp, #0x60]
     ldr r1, [sp, #0x40]
     bl fh_outer                     @ the selected frame's second border, white, outside the first (black again when not selected)
+fh_blank:
     ldr r0, [sp, #0x38]
     adds r2, r9, #2
     movs r1, #0
