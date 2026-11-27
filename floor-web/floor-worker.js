@@ -33,9 +33,7 @@ var REFERENCE = {        // mix -> MD5 of the PC build of the same mix (build_fl
   "PMN": "1e0ccffcd8cb35efe773d601de239126",
   "SPMN": "aee26983163fa5ad9c96ca635bcfe40d",
 };
-var TESTED = {          // mix -> MD5 of the build that was run on a Helix Floor
-  "SPMN": "d7d321b2db63f2c17323445236892212",   // 2026-11-27: savedadodo's 2 h soak; Suddl3's Floor: install, boot screen, editor checks
-};
+var TESTED = {};         // mix -> MD5 of the build that was run on a Helix Floor (none since #20 changed the build)
 
 // Every build: the faster two-NAM kernel layout, the DSP rewrites, the editor's screen mirror, the stopped-clock fix.
 var BASE_ENV = {
