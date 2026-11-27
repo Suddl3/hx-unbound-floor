@@ -6,6 +6,12 @@
                                    --scenes (a folder of <name>.png, 800 x 480) and --assign (bg_store.py's JSON) every
                                    picture is stored on the background of its model, and the backgrounds go to sector
                                    0x460000 (bg_store.py: the layout)
+  floor_emmc_art.py write [SIZE] --scenes DIR --assign FILE --cutout
+                                   the gear stored alone, bit 15 set on its see-through pixels (hard edge): one picture for every
+                                   background, which the per-preset scenes need
+  floor_emmc_art.py stored --assign FILE [--theme FILE] | --clear
+                                   the per-preset scene table (the assignment's "stored" map: "<setlist * 128 + preset>": scene)
+                                   to sector 0x45fffe; a power cycle applies it (2 sectors, past the partitions)
   floor_emmc_art.py bg-live        dev mode (RAM only): run the module with backgrounds from free SDRAM (a restart undoes it)
   floor_emmc_art.py bg-mode 0|1 [installed]   switch the store between scene per category (0) and the theme pack (1)
   floor_emmc_art.py bg-test SCENES ASSIGN   dev mode: add the background section to the EXISTING store header, backgrounds
@@ -44,10 +50,11 @@ HDR_SECTORS = 12                # header sectors (m4/focus_emmc.s HDR_SECS, bg_s
 MAGIC = b"HXPC"
 
 
-def build(size, scenes=None, assign=None, theme=None):
+def build(size, scenes=None, assign=None, theme=None, cutout=False):
     """(header, pictures, sectors a picture, backgrounds). assign = set A (scene per category, the default); theme = an optional
     set B (a theme pack) in the same assignment format: its own composited pictures, map and slots; the header's mode word
-    (0 = A) picks the set (bg-mode switches it without rewriting anything else)."""
+    (0 = A) picks the set (bg-mode switches it without rewriting anything else). cutout: the gear is stored alone, with bit 15
+    set on its see-through pixels (bg_store.cutout), so one picture serves every background and the per-preset scenes."""
     import art_map
     from stage_art import rgb555
     m = art_map.build()
@@ -68,11 +75,12 @@ def build(size, scenes=None, assign=None, theme=None):
             for pid in range(n):                          # one stored picture per (picture, background)
                 if base[pid] == 0xFFFF:
                     continue
-                key = (base[pid], slots[pid])
+                key = (base[pid], None if cutout else slots[pid])
                 if key not in done:
                     img = art_map.open_picture(m["pictures"][base[pid]])
                     done[key] = len(pics)
-                    pics.append(rgb555(img, size) if slots[pid] is None else bg_store.composite(scn[slots[pid]], img, size))
+                    pics.append(bg_store.cutout(img, size) if cutout else
+                                rgb555(img, size) if slots[pid] is None else bg_store.composite(scn[slots[pid]], img, size))
                 mp[pid] = done[key]
             return mp, slots
         mp, slots_a = compose(assign)
@@ -80,7 +88,10 @@ def build(size, scenes=None, assign=None, theme=None):
             map_b, slots_b = compose(theme)
     else:
         mp = base
-        pics = [rgb555(art_map.open_picture(p), size) for p in m["pictures"]]
+        if cutout:
+            import bg_store
+        pics = [bg_store.cutout(art_map.open_picture(p), size) if cutout else rgb555(art_map.open_picture(p), size)
+                for p in m["pictures"]]
     spp = (size * size * 2 + 511) // 512
     nam = b""
     by_slot = nam_images("picture")                      # each NAM capture's own big picture (m4/focus_emmc.s fe_img, FNAM_*)
@@ -88,11 +99,14 @@ def build(size, scenes=None, assign=None, theme=None):
         from PIL import Image
         nam_pid = nam_preset_id()
         slot = slots_a[nam_pid] if scenes and nam_pid < n else None
+        if cutout:
+            import bg_store
         at = {}
         for ident in sorted(set(by_slot.values())):
             img = Image.open(ident)
             at[ident] = len(pics)
-            pics.append(rgb555(img, size) if slot is None else bg_store.composite(scn[slot], img, size))
+            pics.append(bg_store.cutout(img, size) if cutout else
+                        rgb555(img, size) if slot is None else bg_store.composite(scn[slot], img, size))
         tab = [0xFFFF] * 128
         for sl, ident in by_slot.items():
             tab[sl - 1] = at[ident]
@@ -112,8 +126,8 @@ def build(size, scenes=None, assign=None, theme=None):
     return hdr, pics, spp, bgs
 
 
-def write(size, scenes=None, assign=None, theme=None):
-    hdr, pics, spp, bgs = build(size, scenes, assign, theme)
+def write(size, scenes=None, assign=None, theme=None, cutout=False):
+    hdr, pics, spp, bgs = build(size, scenes, assign, theme, cutout)
     data = b"".join(pics)
     total = len(data) // 512
     print(f"{len(pics)} pictures {size}x{size}: {total} sectors ({len(data) / 1e6:.1f} MB) from {STORE + HDR_SECTORS:#x}"
@@ -199,6 +213,7 @@ NAM_PID = 380                   # the NAM A2 Lite block's preset id on this firm
 NAM_ICONS = os.environ.get("NAM_CAPTURE_ICONS", "")   # a clone of Suddl3/hx-edit-unbound (formerly hx-edit-nam)
 
 
+# HX_ART_DIR: HX Edit Unbound's own 3D gear instead of HX Edit's pictures: auto/hxart_from_pack.py makes the folder from the release's helix-gear-art.zip.
 # NAM_ICON_PIX: a folder of the pictures themselves instead of nam_capture_icons/ (e.g. the 256/ folder of Suddl3's nam-gear-art.zip,
 # release gear-art-2026-11-22, the pictures without the floor shadow; same ids as the file names there). The picking rules still come from NAM_CAPTURE_ICONS.
 
@@ -392,6 +407,27 @@ def bg_test(scenes, assign):
     print(f"{len(bgs)} backgrounds written, header section added: {dict((nm, slots.count(i)) for i, nm in enumerate(names))}")
 
 
+def stored_write(assign, theme=None, clear=False):
+    """The per-preset scene table (bg_store.stored_table) at sector 0x45fffe, 2 sectors past the partitions and before the
+    backgrounds: assign["stored"] = {"<setlist * 128 + preset>": scene name}. The firmware reads it once at the first Focus View
+    paint, so a power cycle applies a change. clear: zeroes the table (the firmware then ignores it)."""
+    import bg_store
+    if clear:
+        data = bytes(1024)
+    else:
+        names = list(assign["scenes"]) + [x for x in (theme or {}).get("scenes", []) if x not in assign["scenes"]]
+        data = bg_store.stored_table(assign.get("stored"), names)
+    with floor_poke.Poke() as p:
+        p.enable_bulk()
+        cur = floor_emmc.read(p, bg_store.STORED_SEC, 2)
+        if any(cur) and cur[:4] != bg_store.STORED_MAGIC:
+            raise SystemExit("the sectors before the backgrounds are not blank and hold no scene table: refusing to write over them")
+        floor_emmc.write(p, bg_store.STORED_SEC, data)
+        assert floor_emmc.read(p, bg_store.STORED_SEC, 2) == data, "scene table read back differs"
+    n = struct.unpack_from("<H", data, 4)[0]
+    print("scene table cleared" if clear else f"scene table written: {len([b for b in data[8:8 + n] if b != 0xFF])} presets, N = {n}")
+
+
 def bg_mode(mode, installed=False):
     """Switch the picture store between set A (0: scene per category) and set B (1: the theme pack): the mode word in the
     eMMC header (one sector write; survives restarts) and, when the focus module is running, its RAM copy of the header and
@@ -449,8 +485,8 @@ def main():
     flag = lambda f: a[a.index(f) + 1] if f in a else None
     inp = flag("--input")
     if inp:                                       # the editor's file (store_input.py): write and icons only
-        if not a or a[0] not in ("write", "icons"):
-            sys.exit("--input goes with write and icons")
+        if not a or a[0] not in ("write", "icons", "stored"):
+            sys.exit("--input goes with write, icons and stored")
         try:
             STORE_INPUT = store_input.load(inp)
         except store_input.StoreInputError as e:
@@ -467,9 +503,20 @@ def main():
             scenes, assign, theme = STORE_INPUT["scenes_dir"], STORE_INPUT["assign"], STORE_INPUT["theme"]
         if bool(scenes) != bool(assign) or (theme and not scenes):
             sys.exit("--scenes and --assign go together; --theme (a second assignment, the theme pack) needs both")
-        rest = [x for x in rest if x != "--theme" and x != flag("--theme")]
+        cutout = "--cutout" in a or bool((STORE_INPUT or {}).get("cutout"))
+        rest = [x for x in rest if x not in ("--theme", flag("--theme"), "--cutout")]
         size = int(rest[0]) if rest else (STORE_INPUT or {}).get("size") or 128
-        write(size, scenes, assign, theme)
+        write(size, scenes, assign, theme, cutout)
+    elif a and a[0] == "stored":
+        if "--clear" in a:
+            stored_write(None, clear=True)
+        else:
+            asg, thm = flag("--assign"), flag("--theme")
+            asg = json.load(open(asg)) if asg else (STORE_INPUT or {}).get("assign")
+            thm = json.load(open(thm)) if thm else (STORE_INPUT or {}).get("theme")
+            if not asg:
+                sys.exit("stored needs --assign FILE (or --input store.json): the file's \"stored\" map and its scenes' order")
+            stored_write(asg, thm)
     elif a and a[0] == "icons":
         icons_write(int(a[1]) if len(a) > 1 else (STORE_INPUT or {}).get("icon_size") or ICON_SIZE)
     elif a and a[0] == "bg-live":

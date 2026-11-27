@@ -32,6 +32,11 @@
 .equ SETB_SLOT, 5072
 .equ BG_HDR, 2048                   @ in the header read at HDR: "HXBG", u16 count, u16 sectors a background, u32 first sector,
 .equ MAGICBG, 0x47425848            @ u16 y0, u16 rows, then u8 slot[preset id] (0xff none); the PC side is bg_store.py
+.equ STORED_SEC, 0x45fffe           @ the per-preset scene table, 2 sectors just before the backgrounds: "HXSB", +4 u16 N (at most
+.equ MAGICSB, 0x42535848            @ 1016), +6 spare, +8 u8 scene[N] by stored preset (setlist * 128 + preset), 0xff none; read once
+.equ STB, 0x29902000                @ ... into free SDRAM (the header's 6 KB at HDR end at 0x29901800)
+.equ STORED_WORD, 0x281ee64c        @ the stored preset the firmware is on: setlist * 128 + preset (a 32-bit word at the head of its preset record)
+.equ STB_MAX, 1016
 .global fe_img, fe_hook
 
 
@@ -152,11 +157,18 @@ fh_loop:
     cmp r0, #0
     beq fh_next                     @ hidden
     ldr r0, [r8, #0x14]
+    ldr r1, [r8, #0x18]
     cmp r0, #48
+    bne fh_mvchk
+    cmp r1, #48
     bne fh_next
-    ldr r0, [r8, #0x18]
-    cmp r0, #48
-    bne fh_next                     @ not a block frame (the move frames, the splits, the inputs and outputs)
+    b fh_isblk
+fh_mvchk:
+    cmp r0, #52
+    bne fh_next
+    cmp r1, #68
+    bne fh_next                     @ not a block frame (the splits, the inputs and outputs). 52 x 68: the move frame the stock draws for
+fh_isblk:                           @ the block lifted with the Action button (the frame is its top 52 rows): the model's picture goes in too
     ldr r9, [r8]                    @ its image index
     cmp r9, #1024
     bhs fh_next
@@ -241,6 +253,9 @@ fh_pic:
     ldr r0, [r8, #0x10]
     sub.w r0, r0, r1, asr #1
     add.w r0, r0, r2, asr #1        @ centre y
+    cmp r2, #68                     @ the lifted block's move frame: 52 x 68 centred on the slot, its frame the top 52 rows
+    it eq
+    subeq r0, r0, #8
     sub.w r1, r3, r9, lsr #1
     subs r1, #1                     @ the blanked square's left
     sub.w r2, r0, r9, lsr #1
@@ -249,8 +264,15 @@ fh_pic:
     mla r2, r2, r12, r1
     add.w r12, r4, r2, lsl #1       @ its first pixel
     str r12, [sp, #0x38]
+    ldr r0, [r8, #0x18]
+    cmp r0, #68
+    bne fh_stdfr
+    movs r1, #0                     @ the move frame: drawn as not selected, with no outline recolour and no second border (both are
+    str r1, [sp, #0x40]             @ laid out for the 48 square frame); the stock white frame stays
+    b fh_blank
+fh_stdfr:
     lsrs r2, r9, #1
-    rsb r2, r2, #23                 @ the frame (48 square) starts this many pixels before the blanked square
+    rsb r2, r2, #23                @ the frame (48 square) starts this many pixels before the blanked square
     movw r0, #1602
     mul r2, r2, r0
     sub.w r0, r12, r2               @ the frame's first pixel
@@ -273,6 +295,7 @@ fh_noring:
     ldr r0, [sp, #0x60]
     ldr r1, [sp, #0x40]
     bl fh_outer                     @ the selected frame's second border, white, outside the first (black again when not selected)
+fh_blank:
     ldr r0, [sp, #0x38]
     adds r2, r9, #2
     movs r1, #0
@@ -690,7 +713,10 @@ fe_row:
     mov r0, r8
 fe_px:
     ldrh r1, [r7], #2
-    strh r1, [r0], #2
+    tst r1, #0x8000                 @ bit 15 set: see-through, the background stays (hard edge; PICTURE_STORE.md)
+    ite eq
+    strheq r1, [r0], #2
+    addne r0, r0, #2
     subs r3, #1
     bne fe_px
     movw r12, #ROW
@@ -723,7 +749,11 @@ fe_bg:
     bne fb_seta
     ldr r1, =HDR + SETB_SLOT
 fb_seta:
-    ldrb r6, [r1, r0]               @ r6 the slot
+    ldrb r6, [r1, r0]               @ r6 the slot (this model's)
+    bl fe_stored                    @ this preset's own scene, 0xff none (clobbers r0-r3, r12)
+    cmp r0, #0xff
+    it ne
+    movne r6, r0                    @ the preset's scene wins over the model's
     ldrh r1, [r5, #4]               @ the count
     cmp r1, #250
     bhi fb_out
@@ -778,6 +808,51 @@ fb_copy:
 fb_out:
     pop {r5-r9, pc}
 
+@ fe_stored: -> r0 the scene of the stored preset the firmware is on (the table at STORED_SEC, read into STB on the first call), 0xff none:
+@ no table, a wrong magic, an entry past N, or a read that failed. Clobbers r1-r3, r12.
+.thumb_func
+fe_stored:
+    push {r4, lr}                   @ two words: the read below stays 8-byte aligned
+    adr.w r12, fe_sbstate
+    ldr r0, [r12]
+    cmp r0, #1
+    beq fs_have
+    bhi fs_none                     @ 2: no table
+    ldr r0, =STB                    @ 0: the first call reads it
+    ldr r1, =STORED_SEC
+    movs r2, #2
+    ldr r3, =READ
+    blx r3
+    ldr r1, =STB
+    ldr r1, [r1]
+    ldr r2, =MAGICSB
+    cmp r0, #0
+    it ge
+    cmpge r1, r2
+    ite eq
+    moveq r0, #1
+    movne r0, #2
+    adr.w r12, fe_sbstate
+    str r0, [r12]
+    cmp r0, #1
+    bne fs_none
+fs_have:
+    ldr r2, =STB
+    ldrh r3, [r2, #4]               @ N
+    cmp r3, #STB_MAX
+    bhi fs_none
+    ldr r1, =STORED_WORD
+    ldr r1, [r1]                    @ setlist * 128 + preset
+    cmp r1, r3
+    bhs fs_none
+    add r2, r2, #8
+    ldrb r0, [r2, r1]
+    pop {r4, pc}
+fs_none:
+    movs r0, #0xff
+    pop {r4, pc}
+.ltorg
+
 @ fe_row: r4 the frame -> r2 its row of 32 words (one per path + slot): the first pixel of the frame whose white border is drawn there, 0 none.
 @ Two frame buffers are drawn in turn and each keeps its own pixels, so each has a row (found by its address, taken on first sight).
 fe_fbrow:
@@ -815,7 +890,7 @@ fo_none:
     pop {r0-r3, pc}
 
 .ltorg
-.org 0x800                          @ (focus_emmc.py LIT: the code before fe_img outgrew 0x500)
+.org 0x880                          @ (focus_emmc.py LIT: the code before the literals outgrew 0x800)
 dm_cfg_p:
     .word 0                         @ the meter's dm_cfg (the build / the host fills it)
     .word 0                         @ the meter's focus_fill, Thumb bit set
@@ -835,6 +910,8 @@ fe_cached:
     .word 0xffffffff                @ the picture in the cache
 fe_bgcached:
     .word 0xffffffff                @ the background (slot) in BGCACHE
+fe_sbstate:
+    .word 0                         @ the per-preset scene table: 0 not read, 1 ready, 2 none
 
 @ ---- fe_pre: Focus View's exit cleanup, in the paint task (the owner's double-Home bug, FINDINGS 2026-11-16) ------------------
 @ A jump over dm_paint's `ldr.w r3, [pc, #0x400]; blx r3; str r0, [sp, #0x80]` (8 bytes: the stock paint of the home view, its result

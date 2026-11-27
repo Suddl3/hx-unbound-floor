@@ -24,7 +24,15 @@ def bg_section(count=BGN, spb=BGSPB, y0=Y0, rows=ROWS, magic=b"HXBG", slots=None
     return sec + bytes(slots.get(i, 0xFF) for i in range(N))
 
 
-def machine(with_store=True, bg=None, setb=False, nam=False):
+STORED_SEC, STB, STORED_WORD = 0x45fffe, 0x29902000, 0x281ee64c
+
+
+def stored_table(entries, n=640, magic=b"HXSB"):
+    t = magic + struct.pack("<HH", n, 0) + bytes(0xFF if i not in entries else entries[i] for i in range(min(n, 1016)))
+    return t + bytes(1024 - len(t))
+
+
+def machine(with_store=True, bg=None, setb=False, nam=False, stored=None, holes=False):
     mu = Uc(UC_ARCH_ARM, UC_MODE_THUMB | UC_MODE_MCLASS)
     for b, s in ((0x10000000, 0x100000), (0x28000000, 0x2000000), (0x20000000, 0x10000)):
         mu.mem_map(b, s)
@@ -60,10 +68,15 @@ def machine(with_store=True, bg=None, setb=False, nam=False):
             emmc[STORE + j] = hdr[512 * j:512 * (j + 1)]
         for k in range(3):
             pic = b"".join(bytes([k + 1, 0x40 + r]) * S for r in range(S))
+            if holes and k == 2:                          # picture 2: bit 15 set on its first four columns (see-through)
+                pic = b"".join((bytes([k + 1, 0xC0 + r]) * 4 + bytes([k + 1, 0x40 + r]) * (S - 4)) for r in range(S))
             pic += bytes(SPP * 512 - len(pic))
             for j in range(SPP):
                 emmc[FIRST + k * SPP + j] = pic[512 * j:512 * (j + 1)]
-    st = {"pid": 0, "ok": 0, "reads": [], "fail": False, "slot": 0, "asked": 0}
+    if stored is not None:
+        for j in range(2):
+            emmc[STORED_SEC + j] = stored[512 * j:512 * (j + 1)]
+    st = {"pid": 0, "ok": 0, "reads": [], "fail": False, "slot": 0, "asked": 0, "sbreads": [], "preset": 0}
 
     def hook(mu, addr, size, _):
         name = STUBS.get(addr)
@@ -85,7 +98,7 @@ def machine(with_store=True, bg=None, setb=False, nam=False):
             mu.mem_write(mu.reg_read(UC_ARM_REG_R3), struct.pack("<I", st["slot"] << 8) + bytes(8))
         elif name == "read":
             buf, sec, cnt = (mu.reg_read(r) for r in (UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_R2))
-            st["reads"].append((sec, cnt))
+            (st["sbreads"] if sec == STORED_SEC else st["reads"]).append((sec, cnt))
             if st["fail"]:
                 mu.reg_write(UC_ARM_REG_R0, 0xfffffffd)
                 return
@@ -94,8 +107,11 @@ def machine(with_store=True, bg=None, setb=False, nam=False):
 
     mu.hook_add(UC_HOOK_CODE, hook)
 
-    def run(pid, ok=0, fail=False, slot=0):
+    def run(pid, ok=0, fail=False, slot=0, preset=None):
         st.update(pid=pid, ok=ok, fail=fail, slot=slot)
+        if preset is not None:
+            st["preset"] = preset
+        mu.mem_write(STORED_WORD, struct.pack("<I", st["preset"]))
         st["reads"].clear()
         mu.mem_write(FB, bytes(800 * 480 * 2))
         mu.reg_write(UC_ARM_REG_R4, FB)
@@ -178,6 +194,47 @@ assert drawn(run(9, slot=4), 0) and drawn(run(9, slot=0), 0) and drawn(run(9, sl
 assert drawn(run(5), 2) and st["asked"] == 4                                    # another model: its own picture, no query
 run, st = machine(nam=False)
 assert drawn(run(9, slot=3), 0) and st["asked"] == 0                            # a store without NAM pictures: as before
+
+# per-preset scenes: the table at STORED_SEC (read once) overrides the model's background; setlist * 128 + preset indexes it
+run, st = machine(bg=bg_section(), stored=stored_table({3: 0, 129: 1, 4: 0xFF}))
+fb = run(5, preset=3)                                                          # pid 5's own slot is 1; this preset says scene 0
+assert bgdrawn(fb, 0) and drawn(fb, 2), "stored scene wins"
+assert st["sbreads"] == [(STORED_SEC, 2)], st["sbreads"]
+fb = run(5, preset=129)                                                        # setlist 1, preset 1 -> scene 1
+assert bgdrawn(fb, 1) and st["sbreads"] == [(STORED_SEC, 2)]                   # (the table is read once)
+fb = run(5, preset=4)                                                          # 0xff: the model's own slot (1)
+assert bgdrawn(fb, 1)
+fb = run(9, preset=3)                                                          # another model, same preset: scene 0 as well
+assert bgdrawn(fb, 0)
+fb = run(7, preset=3)                                                          # a model with no background of its own gets the preset's
+assert bgdrawn(fb, 0) and drawn(fb, 1)
+fb = run(5, preset=640)                                                        # past the table's N: the model's own
+assert bgdrawn(fb, 1)
+fb = run(5, preset=0)                                                          # no entry: the model's own
+assert bgdrawn(fb, 1)
+run, st = machine(bg=bg_section(), stored=stored_table({3: 7}))               # scene 7 does not exist: no background (the count check)
+assert bgnone(run(5, preset=3)) and drawn(run(5, preset=3), 2)
+run, st = machine(bg=bg_section(), stored=stored_table({3: 0}, magic=b"HXSX"))  # a wrong magic: ignored, read once
+assert bgdrawn(run(5, preset=3), 1) and bgdrawn(run(5, preset=3), 1) and len(st["sbreads"]) == 1
+run, st = machine(bg=bg_section(), stored=stored_table({3: 0}, n=1017))        # N too large: ignored
+assert bgdrawn(run(5, preset=3), 1)
+run, st = machine(bg=bg_section())                                             # no table at all: as before
+assert bgdrawn(run(5, preset=3), 1) and drawn(run(5, preset=3), 2)
+run, st = machine(bg=None, stored=stored_table({3: 0}))                        # a store without a background section: no background
+assert bgnone(run(5, preset=3)) and drawn(run(5, preset=3), 2)
+# see-through pixels: bit 15 set leaves the background there (hard edge); other pixels as before
+run, st = machine(bg=bg_section(), holes=True)
+fb = run(5)
+top = 196 - S // 2
+for r in range(S):
+    row = fb[((top + r) * 800 + 400 - S // 2) * 2:][:2 * S]
+    bgpx = bytes([0xA0 + 1, (top + r - Y0)]) if 0 <= top + r - Y0 < ROWS else bytes(2)
+    assert row[:8] == bgpx * 4, (r, row[:8])                                   # the four holes show the background
+    assert row[8:] == bytes([3, 0x40 + r]) * (S - 4), r                        # the rest is the picture
+run, st = machine(holes=True)                                                  # no background at all: holes show the plain frame
+fb = run(5)
+assert fb[((top + 0) * 800 + 400 - S // 2) * 2:][:8] == bytes(8)
+print("focus_emmc: per-preset scenes (table read once, bounds, wrong magic, no table) and see-through pixels: OK")
 print("focus_emmc: NAM capture pictures by slot, fallbacks, old stores: OK")
 print("focus_emmc: backgrounds by slot, cached, bounds, two sets: OK")
 print("focus_emmc: header read once, picture by preset id, cache, retry, none / empty / no block, no store: OK")

@@ -10,6 +10,7 @@ background the pedal's slot uses (read back from the unit, so the dither around 
 
   --preview DIR   write the two pictures as PNGs and stop (nothing is read from the unit)
   --dry-run       read the stores, say what would be written, write nothing
+  --cutout        the big picture as bg_store.cutout (bit 15 = see-through), for a store written with floor_emmc_art.py --cutout
 
 Safety: only sectors 0x400000..0x760000 (past every partition, the stores' own area) are touched; the new pictures go into
 the area of its own stores past their live pictures (or the pedal's own previous pictures when it already has them); each header is written
@@ -144,7 +145,9 @@ def main():
               f"{'icon %d (replace)' % icur if icur != NONE else 'new icon %d' % iidx}")
         # --- the big picture, solid on its background
         art = draw(size)
-        if slot is None:
+        if "--cutout" in args:                                  # a store written with --cutout: the gear alone, see-through pixels
+            px = bg_store.cutout(art, size)
+        elif slot is None:
             px = plain555(art, size)
         else:
             raw = floor_emmc.read(p, bfirst + slot * bspp, bspp)
