@@ -1,7 +1,11 @@
 # Faster DSP code for stock models (`NAM_DSP_OPT=1`)
 
 nocaseguy's bit-exact SHARC rewrites ([hx-stomp-nam-lite, branch `dsp-opt-patch-list`](https://github.com/nocaseguy/hx-stomp-nam-lite/tree/dsp-opt-patch-list),
-GPL-3.0-or-later), carried over to the Helix Floor 3.80.0 DSP program. Off by default. All credit for the rewrites goes to
+GPL-3.0-or-later), carried over to the Helix Floor 3.80.0 DSP program. Off by default.
+
+> **Do not use: it can freeze the Floor.** With the 32 listed groups, loading Poly Chorus or Infinite Sustain stops the unit until a
+> power cycle (confirmed 2026-11-26). The builder page leaves this stage out until the responsible groups are found.
+ All credit for the rewrites goes to
 nocaseguy; their method and measurements are in that branch.
 
 `dsp_opt_floor.json` lists **only the 32 groups proven on a Floor**. It holds the stock range's hash and the new values, no
