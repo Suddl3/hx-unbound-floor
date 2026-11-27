@@ -35,13 +35,14 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .num { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-weight: 700; margin-right: 8px; font-size: .95rem; }
 .sub { color: var(--muted); margin-top: 0; }
 button, .btn { font: inherit; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 9px 16px; cursor: pointer; text-decoration: none; display: inline-block; }
-button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+button.secondary, .btn.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
 button:disabled { opacity: .5; cursor: default; }
 input[type=file] { font: inherit; max-width: 100%; }
 input[type=number] { font: inherit; width: 5.5em; padding: 4px 6px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; }
 code, kbd { background: var(--code); padding: 1px 5px; border-radius: 4px; font-size: .92em; }
 .knob { font-weight: 600; }
 .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0; }
+[hidden] { display: none !important; }   /* .row (display: flex) would otherwise show hidden rows */
 .status { margin: 10px 0; min-height: 1.5em; }
 .ok { color: var(--ok); } .bad { color: var(--bad); } .muted { color: var(--muted); }
 progress { width: 100%; height: 10px; }
@@ -90,6 +91,10 @@ pre { background: var(--code); padding: 10px; border-radius: 6px; overflow-x: au
     <progress id="prog" value="0" max="9" hidden></progress>
     <div class="status" id="buildStatus" role="status"></div>
     <div class="row" id="dlRow" hidden><a class="btn" id="dlLink" download>Download the firmware</a><span id="dlMd5" class="muted"></span></div>
+    <details id="devBox" class="noprint" hidden><summary>For developers</summary>
+      <p>This firmware has the live dev tools in <a href="https://github.com/Suddl3/hx-unbound-floor/tree/main/helix-floor/floor/auto">helix-floor/floor/auto</a> built in (screen mirror, input, peek and RAM poke). The tools that need this exact build's addresses read them from this file: save it as <code>helix-floor/floor/auto/live.json</code>, or point <code>HX_LIVE_JSON</code> at it. Not needed to use the Floor.</p>
+      <div class="row"><a class="btn secondary" id="liveLink" download>Developer file (.live.json)</a></div>
+    </details>
     <details><summary>Build log</summary><pre id="log"></pre></details>
     <details><summary>How to install it</summary>
       <ol>
@@ -146,10 +151,10 @@ var agree = document.getElementById("agree"), toggles = Array.prototype.slice.ca
 var worker = null, busy = false;
 function ready() { buildBtn.disabled = busy || !stock.files.length || !agree.checked; [stock, agree].concat(toggles).forEach(function (e) { e.disabled = busy; }); }
 stock.addEventListener("change", ready); agree.addEventListener("change", ready);
-toggles.forEach(function (t) { t.addEventListener("change", function () { document.getElementById("dlRow").hidden = true; bst.textContent = ""; }); });
+toggles.forEach(function (t) { t.addEventListener("change", function () { document.getElementById("dlRow").hidden = true; document.getElementById("devBox").hidden = true; bst.textContent = ""; }); });
 buildBtn.addEventListener("click", async function () {
   busy = true; ready(); prog.hidden = false; prog.value = 0; logEl.textContent = "";
-  document.getElementById("dlRow").hidden = true;
+  document.getElementById("dlRow").hidden = true; document.getElementById("devBox").hidden = true;
   bst.className = "status"; bst.textContent = "Starting...";
   var options = {};
   toggles.forEach(function (t) { options[t.getAttribute("data-opt")] = t.checked; });
@@ -166,6 +171,10 @@ buildBtn.addEventListener("click", async function () {
       var a = document.getElementById("dlLink"); a.href = url; a.download = m.file;
       document.getElementById("dlMd5").textContent = "MD5 " + m.md5;
       document.getElementById("dlRow").hidden = m.reference === "differs";
+      var lv = document.getElementById("liveLink");
+      if (lv.href) URL.revokeObjectURL(lv.href);
+      if (m.live) { lv.href = URL.createObjectURL(new Blob([m.live], { type: "application/json" })); lv.download = m.file + ".live.json"; }
+      document.getElementById("devBox").hidden = !m.live || m.reference === "differs";
       if (m.reference === "differs") { bst.className = "status bad"; bst.textContent = "Built, but it is not the same file as the reference build of this mix. Don't install it; please report this."; }
       else if (m.tested) { bst.className = "status ok"; bst.textContent = "Done. This exact file has run on a Helix Floor."; }
       else { bst.className = "status warnText"; bst.textContent = "Done" + (m.reference === "match" ? " (same file as the reference build)" : "") + ". This mix has NOT been run on a Floor yet: know the recovery steps before you install it."; }

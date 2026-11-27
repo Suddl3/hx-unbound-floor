@@ -59,3 +59,17 @@ def test_every_toggle_mix_has_a_reference():
 def test_page_toggles_match_the_worker():
     page = (ROOT / "floor-web/index.html").read_text(encoding="utf-8")
     assert re.findall(r'data-opt="(\w+)" checked', page) == ["splash", "pedal", "meter", "names"]
+
+
+def test_developer_file_is_handed_out():
+    """stage_main writes <image>.live.json (the live tools' addresses); the page offers it beside the firmware, as
+    build_floor2.py writes <out.hxf>.live.json, so a builder-page firmware works with helix-floor/floor/auto's tools."""
+    assert '.live.json"' in WORKER and "live.hxf_md5 = out" in WORKER and "live: live ?" in WORKER
+    page = (ROOT / "floor-web/index.html").read_text(encoding="utf-8")
+    assert 'id="liveLink"' in page and 'id="devBox"' in page and '".live.json"' in page
+
+
+def test_hidden_rows_stay_hidden():
+    """The download row is hidden when a build differs from its reference; a display rule on .row must not show it."""
+    page = (ROOT / "floor-web/index.html").read_text(encoding="utf-8")
+    assert re.search(r"^\[hidden\] \{ display: none !important; \}", page, re.M)
