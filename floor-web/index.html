@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NAM on Helix Floor</title>
-<meta name="description" content="Build NAM A2 Lite firmware for the Line 6 Helix Floor and convert your captures, all in your browser.">
+<title>HX Unbound Floor</title>
+<meta name="description" content="Build HX Unbound firmware for the Line 6 Helix Floor and convert NAM captures, all in your browser.">
 <style>
 :root {
   --bg: #f6f5f2; --panel: #ffffff; --text: #1d1d1b; --muted: #5d5b55; --line: #dedbd3;
@@ -60,56 +60,56 @@ pre { background: var(--code); padding: 10px; border-radius: 6px; overflow-x: au
   #slotlist-print { display: block !important; border: 0; }
 }
 #slotlist-print { display: none; }
+.opts label { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; }
+.opts input { margin-top: 5px; }
+.opts b { display: block; }
+.opts span { color: var(--muted); font-size: .95rem; }
+.warnText { color: var(--warn); }
 </style>
 </head>
 <body>
 <main>
-  <h1>NAM captures on your Helix Floor</h1>
-  <p class="lede">Build NAM A2 Lite firmware from your own Line 6 file, install it, and turn your <b>.nam</b> captures into files the Floor can play. Everything runs in this browser. Nothing is uploaded.</p>
+  <h1>HX Unbound Floor</h1>
+  <p class="lede">Build custom firmware for the <b>Line 6 Helix Floor</b> from your own Line 6 file, and turn <b>.nam</b> captures into files it can play. Everything runs in this browser. Nothing is uploaded.</p>
   <div class="warn"><b>Unofficial and experimental.</b> Not made or supported by Line 6. Tested on one Helix Floor. Installing modified firmware is at your own risk and may void your warranty. Read <a href="#recovery">Recovery</a> first.</div>
-  <nav class="noprint"><a href="#s1">1 Get ready</a><a href="#s2">2 Build</a><a href="#s3">3 Install</a><a href="#s4">4 Convert captures</a><a href="#s5">5 Play</a><a href="#recovery">Recovery</a><a href="#next">Coming next</a></nav>
+  <nav class="noprint"><a href="#s1">Build firmware</a><a href="#s2">Convert captures</a><a href="#recovery">Recovery</a></nav>
 
   <section id="s1">
-    <h2><span class="num">1</span>Get ready</h2>
-    <div class="checks">
-      <label><input type="checkbox"> I have a <b>Helix Floor</b> on firmware <b>3.80.0</b> (not LT, Rack, Stomp or Stadium).</label>
-      <label><input type="checkbox"> I have Line 6's file <code>Helix_Floor_v3.80.0_0x7d01f5efb.hxf</code>, unchanged (from Line 6's downloads, or saved by Line 6 Updater).</label>
-      <label><input type="checkbox"> I use <b>Chrome or Edge</b> on a computer, with <b>Line 6 Updater</b> and <b>HX Edit</b> installed.</label>
-      <label><input type="checkbox"> I know the recovery (footswitches <b>6 + 12</b> at power-on) and won't rely on this unit until I've tried it.</label>
+    <h2>Build firmware</h2>
+    <p class="sub">You need a <b>Helix Floor</b> (not LT, Rack, Stomp or Stadium) and Line 6's file <code>Helix_Floor_v3.80.0_0x7d01f5efb.hxf</code>, unchanged. Use Chrome or Edge on a computer.</p>
+    <p>Always included: two NAM A2 Lite blocks per path, faster DSP code for stock amps and drives (about 15% less DSP per amp measured on one Floor; the block limit is unchanged), HX Edit Unbound support and a fix for a stopped MIDI clock.</p>
+    <div class="opts noprint">
+      <label><input type="checkbox" data-opt="splash" checked><div><b>Boot screen</b><span>HX Floor Unbound picture while it starts.</span></div></label>
+      <label><input type="checkbox" data-opt="pedal" checked><div><b>NAM Pedal block</b><span>A second, much lighter NAM block for pedal captures.</span></div></label>
+      <label><input type="checkbox" data-opt="meter" checked><div><b>DSP meter and Focus View</b><span>DSP load on screen and a large view of one block. Focus View's pictures are loaded separately from a PC.</span></div></label>
+      <label><input type="checkbox" data-opt="names" checked><div><b>Real-gear names</b><span>Amps, cabs and effects named after the real gear. Text only.</span></div></label>
     </div>
+    <div class="row noprint"><input type="file" id="stock" accept=".hxf" aria-label="Stock firmware file"></div>
+    <label class="noprint"><input type="checkbox" id="agree"> I know the recovery (footswitches <b>6 + 12</b> at power-on) and accept the risk.</label>
+    <div class="row noprint"><button id="buildBtn" disabled>Build</button></div>
+    <progress id="prog" value="0" max="9" hidden></progress>
+    <div class="status" id="buildStatus" role="status"></div>
+    <div class="row" id="dlRow" hidden><a class="btn" id="dlLink" download>Download the firmware</a><span id="dlMd5" class="muted"></span></div>
+    <details><summary>Build log</summary><pre id="log"></pre></details>
+    <details><summary>How to install it</summary>
+      <ol>
+        <li>On the Floor, select a preset <b>without</b> a NAM block.</li>
+        <li>Close HX Edit. Open <b>Line 6 Updater</b>, choose <b>Offline Mode</b>, then your Helix Floor.</li>
+        <li><b>Choose File</b>, pick the downloaded file, then <b>Update</b> and <b>Accept</b>. Don't unplug or switch off until it finishes (about 20 minutes).</li>
+        <li>The Floor restarts, possibly on a factory setlist: switch back to your own.</li>
+      </ol>
+    </details>
+    <p class="muted">Please don't share the built file: it is Line 6's firmware with changes. The DSP rewrites are <a href="https://github.com/nocaseguy/hx-stomp-nam-lite/tree/dsp-opt-patch-list">nocaseguy's work</a> (GPL-3.0).</p>
   </section>
 
   <section id="s2">
-    <h2><span class="num">2</span>Build your firmware</h2>
-    <p class="sub">Pick the stock file. The page builds the NAM firmware and checks it is byte-for-byte the build that was tested on a Helix Floor. Takes a few minutes; keep this tab open.</p>
-    <div class="row noprint"><input type="file" id="stock" accept=".hxf"><button id="buildBtn" disabled>Build</button></div>
-    <label class="noprint"><input type="checkbox" id="realNames"> Show real-gear names for the amps, cabs and effects (optional, off by default). Text only: presets and sound are unchanged, but the file is then not byte-for-byte the tested build.</label>
-    <progress id="prog" value="0" max="8" hidden></progress>
-    <div class="status" id="buildStatus"></div>
-    <div class="row" id="dlRow" hidden><a class="btn" id="dlLink" download>Download the firmware</a><span id="dlMd5" class="muted"></span></div>
-    <details><summary>Build log</summary><pre id="log"></pre></details>
-    <p class="muted">Please don't share the built file: it is Line 6's firmware with changes, not ours or yours to redistribute.</p>
-  </section>
-
-  <section id="s3">
-    <h2><span class="num">3</span>Install it with Line 6 Updater</h2>
-    <ol>
-      <li>On the Floor, select a preset <b>without</b> a NAM block. (The Floor starts on the last preset; this way a power cycle always comes back cleanly.)</li>
-      <li>Close HX Edit. Open <b>Line 6 Updater</b>, choose <b>Offline Mode</b>, then your Helix Floor.</li>
-      <li><b>Choose File</b> → the file from step 2 → <b>Update</b> → <b>Accept</b>. Don't unplug or switch off until it finishes (about 20 minutes).</li>
-      <li>The Floor restarts. If the Updater's last page shows a web error, that's only its info panel; the install is done.</li>
-      <li>After any firmware install the Floor starts on a <b>factory setlist</b>: switch back to your own setlist.</li>
-    </ol>
-  </section>
-
-  <section id="s4">
-    <h2><span class="num">4</span>Convert your captures</h2>
-    <p class="sub">Pick all your <b>.nam</b> A2 Lite captures at once. Each becomes a <b>.wav</b> that HX Edit imports as a User IR (it carries the capture, not a sound). Choose the first free IR slot: the files are numbered in slot order, so the slot is part of each capture's name.</p>
+    <h2>Convert captures</h2>
+    <p class="sub">Pick <b>.nam</b> A2 Lite captures. Each becomes a <b>.wav</b> to import in HX Edit as a User IR (it carries the capture, not a sound). The files are numbered in slot order. On the Floor, add <b>Amp, NAM, NAM A2 Lite</b> and turn <span class="knob">Model</span> to the slot number.</p>
     <div class="row noprint">
-      <input type="file" id="nams" accept=".nam" multiple>
+      <input type="file" id="nams" accept=".nam" multiple aria-label="NAM captures">
       <label>First free slot <input type="number" id="firstSlot" min="1" max="128" value="1"></label>
     </div>
-    <div class="status" id="convStatus"></div>
+    <div class="status" id="convStatus" role="status"></div>
     <div class="tablewrap"><table id="convTable" hidden>
       <thead><tr><th>Slot</th><th>File (= IR name)</th><th>Capture</th><th>Notes</th></tr></thead><tbody></tbody>
     </table></div>
@@ -125,30 +125,6 @@ pre { background: var(--code); padding: 10px; border-radius: 6px; overflow-x: au
     <table><thead><tr><th>Slot</th><th>IR name</th><th>Capture</th></tr></thead><tbody id="printBody"></tbody></table>
   </section>
 
-  <section id="s5">
-    <h2><span class="num">5</span>Load your captures and play</h2>
-    <ol>
-      <li>Unzip the download. In <b>HX Edit</b>, open <b>Impulses</b>, select the first slot from step 4, and import the <b>.wav</b> files in name order. Check each one landed in the slot its name starts with.</li>
-      <li>On the Floor, add a block: <b>Amp → NAM → NAM A2 Lite</b>.</li>
-      <li>Turn <span class="knob">Model</span> to the slot number. The block's title shows the capture's IR name, which starts with its slot number, so you can scroll by name.</li>
-    </ol>
-    <h3>The knobs</h3>
-    <div class="tablewrap"><table>
-      <tr><td class="knob">Model</td><td>Which capture plays: the User IR slot (1–128) that holds it. A slot with a normal cab IR, or nothing, is silent.</td></tr>
-      <tr><td class="knob">Input</td><td>Gain into the capture, −20 to +20 dB; 0 dB at 5.0.</td></tr>
-      <tr><td class="knob">Bass / Mid / Treble / Presence</td><td>Tone stack after the capture, ±12 dB, flat at 5.0.</td></tr>
-      <tr><td class="knob">Ch Vol</td><td>Output level; 0 dB at 5.0.</td></tr>
-    </table></div>
-    <h3>How many, and where</h3>
-    <ul>
-      <li>Up to <b>two NAM blocks per path</b> (Path 1 runs on one DSP, Path 2 on the other): four per preset.</li>
-      <li>One NAM uses about <b>35% of a DSP</b>. Two on one path leave room for little else, so the layout that works: <b>both NAMs on one path, your effects on the other</b>, with Path 1 feeding Path 2. A stereo rig: Split Y → NAM | NAM → Join.</li>
-      <li>Use a <b>full-rig capture</b> (amp + cab) and you can drop the IR blocks.</li>
-      <li>The Floor refuses a block that would overload a DSP, so a preset can't crackle from too many blocks.</li>
-      <li><b>Build and edit NAM presets on the Floor, not in HX Edit.</b> HX Edit doesn't know the NAM model and can drop NAM blocks when it rewrites a preset.</li>
-    </ul>
-  </section>
-
   <section id="recovery">
     <h2>Recovery, or going back to stock</h2>
     <ol>
@@ -156,15 +132,7 @@ pre { background: var(--code); padding: 10px; border-radius: 6px; overflow-x: au
       <li>In Line 6 Updater (Offline Mode), install the stock <code>Helix_Floor_v3.80.0_0x7d01f5efb.hxf</code>.</li>
     </ol>
     <p>Your presets and IRs stay on the unit. NAM blocks in presets go silent on stock firmware.</p>
-  </section>
-
-  <section id="next">
-    <h2>Coming next</h2>
-    <ul>
-      <li><b>Read your IR slots over USB:</b> this page connects to the Floor and lists which slot holds which capture, so you never have to keep track.</li>
-      <li>A faster NAM kernel, for more room next to two NAM blocks.</li>
-    </ul>
-    <p class="muted">Source and notes: <a href="https://github.com/savedadodo/helix-floor-nam-lite">the repository</a>. Captures convert with upstream hx-stomp-nam-lite's converter.</p>
+    <p class="muted">Source and notes: <a href="https://github.com/Suddl3/hx-unbound-floor">the repository</a>. Captures convert with upstream hx-stomp-nam-lite's converter.</p>
   </section>
 </main>
 
@@ -174,33 +142,37 @@ pre { background: var(--code); padding: 10px; border-radius: 6px; overflow-x: au
 // ---------- build
 var stock = document.getElementById("stock"), buildBtn = document.getElementById("buildBtn");
 var prog = document.getElementById("prog"), bst = document.getElementById("buildStatus"), logEl = document.getElementById("log");
-var worker = null;
-stock.addEventListener("change", function () { buildBtn.disabled = !stock.files.length; });
+var agree = document.getElementById("agree"), toggles = Array.prototype.slice.call(document.querySelectorAll("[data-opt]"));
+var worker = null, busy = false;
+function ready() { buildBtn.disabled = busy || !stock.files.length || !agree.checked; [stock, agree].concat(toggles).forEach(function (e) { e.disabled = busy; }); }
+stock.addEventListener("change", ready); agree.addEventListener("change", ready);
+toggles.forEach(function (t) { t.addEventListener("change", function () { document.getElementById("dlRow").hidden = true; bst.textContent = ""; }); });
 buildBtn.addEventListener("click", async function () {
-  buildBtn.disabled = true; stock.disabled = true; document.getElementById("realNames").disabled = true; prog.hidden = false; prog.value = 0; logEl.textContent = "";
+  busy = true; ready(); prog.hidden = false; prog.value = 0; logEl.textContent = "";
   document.getElementById("dlRow").hidden = true;
   bst.className = "status"; bst.textContent = "Starting...";
+  var options = {};
+  toggles.forEach(function (t) { options[t.getAttribute("data-opt")] = t.checked; });
   var buf = await stock.files[0].arrayBuffer();
   if (!worker) worker = new Worker("floor-worker.js");
   worker.onmessage = function (ev) {
     var m = ev.data;
-    if (m.type === "progress") { prog.value = m.step; bst.textContent = "Step " + m.step + " of " + m.of + ": " + m.text + "..."; }
+    if (m.type === "progress") { prog.max = m.of; prog.value = m.step - 1; bst.textContent = "Step " + m.step + " of " + m.of + ": " + m.text + "..."; }
     else if (m.type === "log") { logEl.textContent += m.text; }
-    else if (m.type === "error") { bst.className = "status bad"; bst.textContent = m.text; buildBtn.disabled = false; stock.disabled = false; document.getElementById("realNames").disabled = false; }
+    else if (m.type === "error") { bst.className = "status bad"; bst.textContent = m.text; busy = false; ready(); }
     else if (m.type === "done") {
       prog.value = prog.max;
       var url = URL.createObjectURL(new Blob([m.bytes], { type: "application/octet-stream" }));
       var a = document.getElementById("dlLink"); a.href = url; a.download = m.file;
       document.getElementById("dlMd5").textContent = "MD5 " + m.md5;
-      document.getElementById("dlRow").hidden = false;
-      bst.className = "status " + (m.pinned || m.names ? "ok" : "bad");
-      bst.textContent = m.names ? "Done, with real-gear names. Only the model names differ from the tested build."
-        : m.pinned ? "Done. This is exactly the build that was tested on a Helix Floor."
-        : "Built, but it differs from the tested build. Don't install it; please report this.";
-      buildBtn.disabled = false; stock.disabled = false; document.getElementById("realNames").disabled = false;
+      document.getElementById("dlRow").hidden = m.reference === "differs";
+      if (m.reference === "differs") { bst.className = "status bad"; bst.textContent = "Built, but it is not the same file as the reference build of this mix. Don't install it; please report this."; }
+      else if (m.tested) { bst.className = "status ok"; bst.textContent = "Done. This exact file has run on a Helix Floor."; }
+      else { bst.className = "status warnText"; bst.textContent = "Done" + (m.reference === "match" ? " (same file as the reference build)" : "") + ". This mix has NOT been run on a Floor yet: know the recovery steps before you install it."; }
+      busy = false; ready();
     }
   };
-  worker.postMessage({ stock: buf, names: document.getElementById("realNames").checked }, [buf]);
+  worker.postMessage({ stock: buf, options: options }, [buf]);
 });
 
 // ---------- convert + slot map

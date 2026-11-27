@@ -1,19 +1,50 @@
-// floor-worker.js - the Helix Floor build (helix-floor/floor/build_floor2.py) in the browser.
-// Pyodide runs the repository's own Python stages on the user's stock Helix Floor 3.80.0 file,
-// without the simulator check (minutes here), then compares the result's MD5 with the build that
-// was tested on a Helix Floor: a match means these are exactly those bytes.
+// floor-worker.js - the HX Unbound Floor build (helix-floor/floor/build_floor2.py's stages) in the browser.
+// Pyodide runs the repository's own Python on the user's stock Helix Floor 3.80.0 file, without the SHARC simulator check
+// (minutes here), then compares the result's MD5 with the same mix built on a PC.
 //
-// In:  { stock: ArrayBuffer, names: boolean }   (names: real-gear model names, opt-in)
+// In:  { stock: ArrayBuffer, options: { splash, pedal, meter, names } }
 // Out: { type: "progress", step, of, text } | { type: "log", text }
-//      { type: "done", file, bytes: ArrayBuffer, md5, names, pinned }   (pinned: the tested build; never with names) | { type: "error", text }
+//      { type: "done", file, bytes: ArrayBuffer, md5, mix, reference, tested } | { type: "error", text }
+//      reference: "match" | "differs" | "none" (no PC build recorded for this mix); tested: the mix has run on a Floor
 "use strict";
 
 var PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/";
 var STOCK_MD5 = "805caa03e8a30fd6ff7892f32ed5a9f4";   // Helix_Floor_v3.80.0_0x7d01f5efb.hxf
-var BUILT_MD5 = "f4338695c5fa965f9100a0d82e632b7e";   // NAM2 (NOMASK kernel, DSP cost 3600), tested on a unit
-var OUT_NAME = "Helix_Floor_v3.80.0_NAM2.hxf";
-var OUT_NAME_NAMES = "Helix_Floor_v3.80.0_NAM2_NAMES.hxf";
-var NAMES_CSV = "helix-floor/names/real_names.csv";   // only fetched when the page asks for real names
+var NAMES_CSV = "helix-floor/names/real_names.csv";
+var SPLASH = "helix-floor/floor/splash/unbound_boot.png";
+
+// A mix is a letter per toggle that is on: S boot screen, P NAM Pedal, M meter and Focus View, N real-gear names.
+var REFERENCE = {        // mix -> MD5 of the PC build of the same mix (build_floor2.py, same environment)
+  "": "5e39ee8a64a829deca1cf441d9000d7c",
+  "S": "0b7e1d70e1651b198c34ab4ebc26524c",
+  "P": "fbd01b44c0b05cb393d369318f027aff",
+  "M": "c277582efacc9ed20d4958a484d70fe7",
+  "SP": "769b5df580f34b27ba5ee0fbe29bdb0b",
+  "SM": "f18db9c832977ab08c99b6a9fd657ec4",
+  "PM": "7ecbdfe87b418890e61c610dcb7cdf64",
+  "SPM": "2f1bd7a239472761056b4f8f5e1a2bf9",
+  "N": "5ab351d4a68a5b19db4666295737f0a5",
+  "SN": "2fa18eef0b14c91c720e79df7cd7a5a1",
+  "PN": "92954063384f18074511326b018551d6",
+  "MN": "fc74318e8e8d050231e69917294de9e3",
+  "SPN": "698e061a527f4dff1cf617d799b7b43c",
+  "SMN": "94d0f43f5e020dfd5c53ed63a50a4847",
+  "PMN": "0acb49d8271b257b927d397d347f4768",
+  "SPMN": "2fce003c22e5117a85849ceee1a7c32f",
+};
+var TESTED = {};         // mix -> MD5 of the build that was run on a Helix Floor (none of these mixes yet)
+
+// Every build: the faster two-NAM kernel layout, the DSP rewrites, the editor's screen mirror, the stopped-clock fix.
+var BASE_ENV = {
+  NAM_KERNEL: "nam_floor5", NAM_MAX_BLOCKS: "16", NAM_DIAG: "1",      // NAM_DIAG: no simulator check
+  NAM_PAIR: "1", NAM_NOSENT: "1", NAM_LB_B0: "2", NAM_DSP_COST: "3250", NAM_PR1: "0",
+  NAM_SCREEN_MIRROR: "1", NAM_CLK_STOP: "1",
+};
+var TOGGLE_ENV = {
+  pedal: { NAM_PEDAL: "1" },
+  meter: { NAM_DSP_METER: "1", NAM_FOCUS_VIEW: "1", NAM_EMMC_ART: "1" },
+  names: { NAM_NAMES: "/work/names.csv" },
+};
 
 // What the build reads, relative to the repository root (the page sits in floor-web/).
 var SOURCES = [
@@ -38,10 +69,21 @@ var SOURCES = [
   "helix-floor/floor/stage_model.py",
   "helix-floor/floor/stage_kernel.py",
   "helix-floor/floor/stage_main.py",
+  "helix-floor/floor/stage_dsp_opt.py",
+  "helix-floor/floor/dsp_opt_port.py",
+  "helix-floor/floor/dsp_opt_floor.json",
+  "helix-floor/floor/stage_splash.py",
   "helix-floor/floor/build_floor.py",
   "helix-floor/floor/build_staged.py",
   "helix-floor/floor/build_test2b.py",
   "helix-floor/floor/build_test2c.py",
+  "helix-floor/floor/m4/floor_dsp_meter.bin",
+  "helix-floor/floor/m4/floor_dsp_meter.json",
+  "helix-floor/floor/m4/floor_mirror.bin",
+  "helix-floor/floor/m4/floor_mirror.json",
+  "helix-floor/floor/m4/focus_emmc.bin",
+  "helix-floor/floor/m4/unbound_info.bin",
+  "helix-floor/floor/m4/unbound_info.json",
   "tools/hxf.py",
   "tools/l6ia.py",
   "tools/l6ia_verify.py",
@@ -60,9 +102,14 @@ var DRIVER = [
   "import contextlib, hashlib, io, os, runpy, sys",
   "os.chdir('/repo')",
   "sys.modules['capstone'] = None          # (listing only; not in Pyodide)",
-  "os.environ.update(NAM_KERNEL='nam_floor5', NAM_MAX_BLOCKS='16', NAM_DIAG='1')   # NAM_DIAG: no simulator check",
-  "os.environ['NAM_PR1'] = '0'             # the unit-tested kernel (BUILT_MD5); PR #1's patches stay opt-in here",
-  "os.environ['NAM_UNBOUND_INFO'] = '0'   # the tested bytes (BUILT_MD5) have no 0x53 module; it is on by default elsewhere",
+  "def setenv(pairs):",
+  "    for k in [k for k in os.environ if k.startswith('NAM_')]:",
+  "        del os.environ[k]",
+  "    os.environ.update(pairs)",
+  "    # the stages' modules read NAM_* when first imported: forget them, so each build sees its own toggles",
+  "    for n, m in list(sys.modules.items()):",
+  "        if str(getattr(m, '__file__', '') or '').startswith('/repo/'):",
+  "            del sys.modules[n]",
   "def run(argv):",
   "    out = io.StringIO()",
   "    sys.argv = list(argv)",
@@ -80,72 +127,78 @@ var DRIVER = [
 var py = null;
 
 function post(m, t) { self.postMessage(m, t || []); }
-function progress(step, of, text) { post({ type: "progress", step: step, of: of, text: text }); }
+
+async function put(rel) {
+  var r = await fetch("../" + rel);
+  if (!r.ok) throw new Error("Could not load " + rel + " (" + r.status + ")");
+  var data = new Uint8Array(await r.arrayBuffer());
+  py.FS.mkdirTree("/repo/" + rel.split("/").slice(0, -1).join("/"));
+  py.FS.writeFile("/repo/" + rel, data);
+}
 
 async function boot() {
   importScripts(PYODIDE + "pyodide.js");
-  py = await loadPyodide({ indexURL: PYODIDE });
-  await py.loadPackage("numpy");
-  for (var i = 0; i < SOURCES.length; i++) {
-    var rel = SOURCES[i];
-    var r = await fetch("../" + rel);
-    if (!r.ok) throw new Error("Could not load " + rel + " (" + r.status + ")");
-    var data = new Uint8Array(await r.arrayBuffer());
-    var dir = "/repo/" + rel.split("/").slice(0, -1).join("/");
-    py.FS.mkdirTree(dir);
-    py.FS.writeFile("/repo/" + rel, data);
-  }
+  var p = await loadPyodide({ indexURL: PYODIDE });
+  await p.loadPackage(["numpy", "pillow"]);
+  py = p;
+  try {
+    for (var i = 0; i < SOURCES.length; i++) await put(SOURCES[i]);
+    await put(SPLASH);
+  } catch (e) { py = null; throw e; }
   py.runPython(DRIVER);
 }
 
-async function build(stock, names) {
-  var OF = 8;
-  progress(1, OF, "Loading Python and the build tools (first time: about a minute)");
+function mixOf(o) { return (o.splash ? "S" : "") + (o.pedal ? "P" : "") + (o.meter ? "M" : "") + (o.names ? "N" : ""); }
+
+async function build(stock, options) {
+  var mix = mixOf(options), total = 8 + (options.splash ? 1 : 0), n = 0;
+  function step(text) { post({ type: "progress", step: ++n, of: total, text: text }); }
+  step("Loading Python and the build tools (first time: about a minute)");
   if (!py) await boot();
-  var run = py.globals.get("run");
-  var md5 = py.globals.get("md5");
+  var run = py.globals.get("run"), md5 = py.globals.get("md5");
+  var env = Object.assign({}, BASE_ENV);
+  Object.keys(TOGGLE_ENV).forEach(function (k) { if (options[k]) Object.assign(env, TOGGLE_ENV[k]); });
+  py.globals.get("setenv")(py.toPy(new Map(Object.entries(env))));
   py.FS.mkdirTree("/work");
   py.FS.writeFile("/work/stock.hxf", new Uint8Array(stock));
-  if (names) {                      // stage_main reads NAM_NAMES: internal,floor_name,real_name
-    var nr = await fetch("../" + NAMES_CSV);
-    if (!nr.ok) throw new Error("Could not load " + NAMES_CSV + " (" + nr.status + ")");
-    py.FS.writeFile("/work/names.csv", new Uint8Array(await nr.arrayBuffer()));
-    py.runPython("os.environ['NAM_NAMES'] = '/work/names.csv'");
-  } else {
-    py.runPython("os.environ.pop('NAM_NAMES', None)");
+  if (options.names) {
+    await put(NAMES_CSV);
+    py.FS.writeFile("/work/names.csv", py.FS.readFile("/repo/" + NAMES_CSV));
   }
-  progress(2, OF, "Checking your stock file");
   var got = md5("/work/stock.hxf");
   if (got !== STOCK_MD5) {
     throw new Error("This is not Line 6's Helix Floor 3.80.0 file (" + got + "). You need " +
       "Helix_Floor_v3.80.0_0x7d01f5efb.hxf, unchanged.");
   }
-  var s = ["/work/s0.l6ia", "/work/s1.l6ia", "/work/s2.l6ia", "/work/s3.l6ia", "/work/s4.l6ia"];
-  var F = "helix-floor/floor/";
-  var steps = [
-    ["Unpacking", ["tools/hxf.py", "unpack", "/work/stock.hxf", s[0]]],
-    ["Making room in the DSP memory", [F + "stage_slots2.py", s[0], s[1]]],
-    ["Adding the NAM A2 Lite model", [F + "stage_model.py", s[1], s[2]]],
-    ["Assembling the NAM kernel", [F + "stage_kernel.py", s[2], s[3]]],
-    ["Patching the main program", [F + "stage_main.py", s[3], s[4]]],
-  ];
-  for (var i = 0; i < steps.length; i++) {
-    progress(3 + i, OF, steps[i][0]);
-    post({ type: "log", text: run(py.toPy(steps[i][1])) });
-    if (i > 0) try { py.FS.unlink(s[i - 1]); } catch (e) { /* (memory) */ }
+  var F = "helix-floor/floor/", cur = "/work/s0.l6ia", k = 0;
+  function stage(text, argv) {                       // argv(in, out)
+    step(text);
+    var next = "/work/s" + (++k) + ".l6ia";
+    post({ type: "log", text: run(py.toPy(argv(cur, next))) });
+    try { py.FS.unlink(cur); } catch (e) { /* (memory) */ }
+    cur = next;
   }
-  var v = run(py.toPy(["tools/l6ia_verify.py", s[4]]));
+  step("Unpacking your stock file");
+  run(py.toPy(["tools/hxf.py", "unpack", "/work/stock.hxf", cur]));
+  stage("Making room in the DSP memory", function (a, b) { return [F + "stage_slots2.py", a, b]; });
+  stage("Adding the NAM model", function (a, b) { return [F + "stage_model.py", a, b]; });
+  stage("Assembling the NAM kernel", function (a, b) { return [F + "stage_kernel.py", a, b]; });
+  stage("Patching the main program", function (a, b) { return [F + "stage_main.py", a, b]; });
+  var v = run(py.toPy(["tools/l6ia_verify.py", cur]));
   if (v.indexOf("ALL OK") < 0) throw new Error("The firmware check failed:\n" + v);
-  progress(8, OF, "Packing the firmware file");
-  run(py.toPy([F + "floor_hxf.py", "pack", s[4], "/work/out.hxf", "--donor", "/work/stock.hxf"]));
+  stage("Adding the faster DSP code", function (a, b) { return [F + "stage_dsp_opt.py", a, b, F + "dsp_opt_floor.json"]; });
+  if (options.splash) stage("Adding the boot screen", function (a, b) { return [F + "stage_splash.py", a, b, SPLASH]; });
+  step("Packing the firmware file (checks every partition's size)");
+  post({ type: "log", text: run(py.toPy([F + "floor_hxf.py", "pack", cur, "/work/out.hxf", "--donor", "/work/stock.hxf"])) });
   var out = md5("/work/out.hxf");
   var bytes = py.FS.readFile("/work/out.hxf");
-  ["/work/out.hxf", s[4], "/work/stock.hxf"].forEach(function (p) { try { py.FS.unlink(p); } catch (e) { } });
+  ["/work/out.hxf", cur, "/work/stock.hxf"].forEach(function (p) { try { py.FS.unlink(p); } catch (e) { } });
   var buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  post({ type: "done", file: names ? OUT_NAME_NAMES : OUT_NAME, bytes: buf, md5: out, names: !!names,
-         pinned: !names && out === BUILT_MD5 }, [buf]);
+  var ref = REFERENCE[mix];
+  post({ type: "done", file: "Helix_Floor_v3.80.0_UNBOUND" + (mix ? "_" + mix : "") + ".hxf", bytes: buf, md5: out, mix: mix,
+         reference: !ref ? "none" : ref === out ? "match" : "differs", tested: TESTED[mix] === out }, [buf]);
 }
 
 self.onmessage = function (ev) {
-  build(ev.data.stock, !!ev.data.names).catch(function (err) { post({ type: "error", text: String(err && err.message || err) }); });
+  build(ev.data.stock, ev.data.options).catch(function (err) { post({ type: "error", text: String(err && err.message || err) }); });
 };

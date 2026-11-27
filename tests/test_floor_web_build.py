@@ -1,5 +1,6 @@
 """floor-web/floor-worker.js, the in-browser Floor build: it loads every Python module the build's scripts import.
 A module missing from its SOURCES list fails only in the browser (the Pyodide run cannot fetch it), so check here."""
+import itertools
 import re
 from pathlib import Path
 
@@ -36,3 +37,25 @@ def test_sources_cover_every_import():
                 need.add(path)
                 todo.append(path)
     assert not need - have, f"missing from floor-worker.js SOURCES: {sorted(need - have)}"
+
+
+def test_data_files_listed():
+    """The stages also read assembled modules and data beside them; each must be fetched too."""
+    have = listed()
+    for p in [p for p in have if p.startswith("helix-floor/floor/") and p.endswith(".py")]:
+        text = (ROOT / p).read_text(encoding="utf-8")
+        for name in re.findall(r'os\.path\.join\(HERE, "m4", "(\w+\.(?:bin|json))"\)', text):
+            assert f"helix-floor/floor/m4/{name}" in have, f"{p} reads m4/{name}"
+    assert (ROOT / re.search(r'var SPLASH = "([^"]+)"', WORKER).group(1)).is_file()
+
+
+def test_every_toggle_mix_has_a_reference():
+    letters = ("S", "P", "M", "N")
+    mixes = {"".join(c) for n in range(5) for c in itertools.combinations(letters, n)}
+    table = WORKER.split("var REFERENCE")[1].split("};")[0]
+    assert set(re.findall(r'"([SPMN]*)": "[0-9a-f]{32}"', table)) == mixes
+
+
+def test_page_toggles_match_the_worker():
+    page = (ROOT / "floor-web/index.html").read_text(encoding="utf-8")
+    assert re.findall(r'data-opt="(\w+)" checked', page) == ["splash", "pedal", "meter", "names"]
