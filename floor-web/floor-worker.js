@@ -33,7 +33,9 @@ var REFERENCE = {        // mix -> MD5 of the PC build of the same mix (build_fl
   "PMN": "1e0ccffcd8cb35efe773d601de239126",
   "SPMN": "aee26983163fa5ad9c96ca635bcfe40d",
 };
-var TESTED = {};         // mix -> MD5 of the build that was run on a Helix Floor (none since #20 changed the build)
+var TESTED = {          // mix -> MD5 of the build that was run on a Helix Floor
+  "SPMN": "aee26983163fa5ad9c96ca635bcfe40d",   // 2026-11-27: hands-on play test on one Floor (no unattended soak)
+};
 
 // Every build: the faster two-NAM kernel layout, the DSP rewrites, the editor's screen mirror, the stopped-clock fix.
 var BASE_ENV = {
