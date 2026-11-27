@@ -45,7 +45,11 @@ This is a standalone repository with imported history, not a GitHub fork, so Git
 
 ## Build
 
-You need Python 3.10+, `capstone`, and your own Line 6 stock `Helix_Floor_v3.80.0_0x7d01f5efb.hxf` (MD5 `805caa03e8a30fd6ff7892f32ed5a9f4`):
+**In the browser:** [floor-web/](floor-web/index.html) builds the firmware from your own stock file, with toggles for the boot
+screen, NAM Pedal, DSP meter and Focus View, and real-gear names, and converts `.nam` captures. It is published by the
+manual `pages` workflow once GitHub Pages is switched on.
+
+**On a PC:** you need Python 3.10+, `capstone`, and your own Line 6 stock `Helix_Floor_v3.80.0_0x7d01f5efb.hxf` (MD5 `805caa03e8a30fd6ff7892f32ed5a9f4`):
 
 ```bash
 PYTHONUTF8=1 python helix-floor/floor/build_floor2.py path/to/Helix_Floor_v3.80.0_0x7d01f5efb.hxf -o Helix_Floor_v3.80.0_NAM2.hxf

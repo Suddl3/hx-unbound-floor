@@ -1,10 +1,8 @@
 name: pages
 
-# Publishes the setup page (web/) with the Python tools the in-browser build
-# runs (tools/), in the repository's own layout: the page is at /web/.
-# HX Unbound Floor: manual only for now. This repository has no setup page of
-# its own yet; the Floor port's is at
-# https://savedadodo.github.io/helix-floor-nam-lite/floor-web/
+# Publishes the HX Unbound Floor builder page (floor-web/) with the files its in-browser build runs
+# (helix-floor/floor, helix-floor/names, tools/) and the capture converter (web/), in the repository's own layout:
+# the site root forwards to floor-web/. Manual only; GitHub Pages must be set to "GitHub Actions" in the settings.
 on:
   workflow_dispatch:
 
@@ -22,15 +20,17 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}web/
+      url: ${{ steps.deploy.outputs.page_url }}floor-web/
     steps:
       - uses: actions/checkout@v4
       - name: site
         run: |
           mkdir -p _site
-          cp -r web tools LICENSE NOTICE _site/
+          cp -r web floor-web tools LICENSE NOTICE _site/
+          mkdir -p _site/helix-floor
+          cp -r helix-floor/floor helix-floor/names _site/helix-floor/
           find _site -name __pycache__ -prune -exec rm -rf {} +
-          printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=web/"><title>NAM A2 Lite Setup</title><a href="web/">NAM A2 Lite Setup</a>\n' > _site/index.html
+          printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=floor-web/"><title>HX Unbound Floor</title><a href="floor-web/">HX Unbound Floor</a>\n' > _site/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
