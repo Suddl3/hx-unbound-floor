@@ -34,7 +34,7 @@ def main():
     assert len(new) == len(e2), "Entry 2 changed length"
     img, _, _ = l6ia.rebuild_archive(data, {2: l6ia.swap32(new)})
     open(out, "wb").write(img)
-    print(f"DSP rewrites (nocaseguy, bit-exact): {groups} groups, {parcels} parcels changed in place in Entry 2 ({len(e2):#x} bytes, unchanged length)")
+    print(f"DSP rewrites (nocaseguy): {groups} groups, {parcels} parcels changed in place in Entry 2 ({len(e2):#x} bytes, unchanged length)")
 
 
 if __name__ == "__main__":

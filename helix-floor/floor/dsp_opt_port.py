@@ -119,10 +119,15 @@ def find_all(runs, pattern):
     return hits
 
 
-def gen(stomp_e2, floor_e2, patch, only=None):
+def gen(stomp_e2, floor_e2, patch, only=None, max_diff=0.25):
+    """Per group, the rewrite at the Floor's addresses. A routine that is the same code with some operands relocated (data and code
+    addresses that differ per region) is found at the region offset with the fewest differing parcels; the rewrite's parcels are then
+    translated: a parcel the rewrite leaves as the Stomp stock keeps the Floor's own value, one it changes and that is a known
+    relocated operand (same Stomp value -> same Floor value everywhere in the groups' stock) is written as the Floor's value."""
     stomp, floor = Ldr(stomp_e2), Ldr(floor_e2)
     runs = runs_of(floor)
-    out, left = [], []
+    out, left, work = [], [], []
+    offsets = set()
     for g in patch["groups"]:
         if only and g["name"] not in only:
             continue
@@ -136,13 +141,89 @@ def gen(stomp_e2, floor_e2, patch, only=None):
             left.append((g["name"], "no Stomp stock bytes / not parcels"))
             continue
         hits = find_all(runs, b"".join(struct.pack("<H", v) for v in seq))
-        if len(hits) != 1:
+        if len(hits) > 1:
             left.append((g["name"], f"{len(hits)} exact matches in the Floor image"))
             continue
-        off = hits[0] - lo
-        out.append({"name": g["name"], "engine": g.get("engine"), "about": g.get("about"), "first": hits[0], "end": hits[0] + hi - lo,
-                    "offset": off, "stock_sha256": sha(seq),
-                    "set": sorted([p + off, v] for p, v in new.items() if seq[p - lo] != v)})
+        if hits:
+            offsets.add(hits[0] - lo)
+        work.append((g, lo, hi, seq, new, hits[0] - lo if hits else None))
+    # relocated operands: every parcel of a group's stock that the Floor has differently at the group's region offset
+    reloc, hi_changes, chosen = {}, set(), {}
+    for g, lo, hi, seq, new, off in work:
+        if off is None:
+            scored = []
+            for o in sorted(offsets):
+                fl = floor.span(lo + o, hi + o)
+                if fl is not None:
+                    scored.append((sum(1 for a, b in zip(fl, seq) if a != b), o))
+            scored.sort()
+            if not scored or scored[0][0] > max_diff * (hi - lo) or (len(scored) > 1 and scored[1][0] == scored[0][0]):
+                left.append((g["name"], "no region offset with few differing parcels"))
+                continue
+            off = scored[0][1]
+        chosen[g["name"]] = off
+        fl = floor.span(lo + off, hi + off)
+        for k, (a, b) in enumerate(zip(seq, fl)):
+            if a != b:
+                if a == 0xC and b == 0xE and k and seq[k - 1] != fl[k - 1]:
+                    continue                             # the companion parcel of a relocated pair, handled with its first
+                if reloc.setdefault(a, b) != b:
+                    reloc[a] = None                      # one Stomp value, two Floor values: cannot translate it
+                if k + 1 < len(seq) and seq[k + 1] == 0xC and fl[k + 1] == 0xE:
+                    hi_changes.add(a)
+    keys = sorted(k for k, v in reloc.items() if v is not None and k >= 0xA000)
+
+    def bracket(v):
+        lower = [k for k in keys if k <= v]
+        upper = [k for k in keys if k >= v]
+        if not lower or not upper:
+            return None
+        d1, d2 = reloc[lower[-1]] - lower[-1], reloc[upper[0]] - upper[0]
+        return d1 if d1 == d2 else None
+
+    for g, lo, hi, seq, new, _ in work:
+        if g["name"] not in chosen:
+            continue
+        off = chosen[g["name"]]
+        fl = floor.span(lo + off, hi + off)
+        eff = {p: new.get(p, seq[p - lo]) for p in range(lo, hi)}
+        target, tr, bad, comp, unresolved = {}, 0, False, [], []
+        literal = {a for a, b in zip(seq, fl) if a == b}       # values the stock has unrelocated in this routine: not addresses
+        a_lo, a_hi = 0x80000 + (lo - 0x100000) // 3, 0x80000 + (hi - 0x100000) // 3
+        for p in range(lo, hi):
+            v, s0 = eff[p], seq[p - lo]
+            if v == s0:
+                target[p] = fl[p - lo]
+            elif reloc.get(v, 0) is None:
+                bad = True
+            elif v in reloc:
+                target[p] = reloc[v]
+                tr += 1
+                if v in hi_changes and p + 1 < hi and eff[p + 1] == 0xC:
+                    comp.append(p + 1)
+            elif p + 1 < hi and eff[p + 1] in (8, 9) and a_lo - 8 <= (eff[p + 1] << 16 | v) < a_hi + 8 and off % 3 == 0:
+                target[p] = v + off // 3                 # a jump / call target inside the routine itself: it moves with it
+                tr += 1
+            elif p + 2 < hi and eff[p + 1] in (8, 9) and eff[p + 2] != 0 and v >= 0xA000 and v not in literal and bracket(v) is not None:
+                target[p] = v + bracket(v)               # between two relocated addresses that share one offset: it moves the same
+                tr += 1
+            elif p + 2 < hi and eff[p + 1] in (8, 9) and eff[p + 2] != 0 and v >= 0xA000 and v not in literal:
+                unresolved.append((p - lo, hex(v), eff[p + 1]))  # looks like a code / table address outside the routine, not seen in the stock
+                target[p] = v
+            elif p + 1 < hi and eff[p + 1] == 0xC and 0x6000 <= v <= 0x7600 and v not in literal:
+                unresolved.append((p - lo, hex(v)))      # looks like a data address of the relocated heaps, not seen in the stock
+                target[p] = v
+            else:
+                target[p] = v
+        for p in comp:
+            target[p] = 0xE
+        if bad or unresolved:
+            left.append((g["name"], "a rewritten parcel is an ambiguous or unseen relocated operand " + str(unresolved[:4])))
+            continue
+        sets = sorted([p + off, v] for p, v in target.items() if fl[p - lo] != v)
+        out.append({"name": g["name"], "engine": g.get("engine"), "about": g.get("about"), "first": lo + off, "end": hi + off,
+                    "offset": off, "stock_sha256": sha(fl), "relocated": sum(1 for a, b in zip(seq, fl) if a != b),
+                    "translated": tr, "set": sets})
     for names in patch.get("together", []):
         have = [n in {x["name"] for x in out} for n in names]
         if any(have) and not all(have):
