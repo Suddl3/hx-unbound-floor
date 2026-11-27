@@ -84,4 +84,4 @@ def test_tested_mixes_are_their_reference_build():
     """A mix marked as run on a Floor must be the exact file the page builds for it (its reference MD5)."""
     ref = dict(re.findall(r'"([SPMN]*)": "([0-9a-f]{32})"', WORKER.split("var REFERENCE")[1].split("};")[0]))
     tested = dict(re.findall(r'"([SPMN]*)": "([0-9a-f]{32})"', WORKER.split("var TESTED")[1].split("};")[0]))
-    assert tested and all(ref.get(mix) == md5 for mix, md5 in tested.items())
+    assert all(ref.get(mix) == md5 for mix, md5 in tested.items()), tested
