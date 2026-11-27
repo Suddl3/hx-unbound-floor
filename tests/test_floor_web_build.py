@@ -73,3 +73,8 @@ def test_hidden_rows_stay_hidden():
     """The download row is hidden when a build differs from its reference; a display rule on .row must not show it."""
     page = (ROOT / "floor-web/index.html").read_text(encoding="utf-8")
     assert re.search(r"^\[hidden\] \{ display: none !important; \}", page, re.M)
+
+
+def test_dma_abort_fix_stays_on():
+    """NAM_PR1=0 builds the kernel without PR #1 (wait for DMA to be idle before clearing an aborted transfer)."""
+    assert "NAM_PR1" not in WORKER
