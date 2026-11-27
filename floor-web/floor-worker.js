@@ -15,27 +15,26 @@ var SPLASH = "helix-floor/floor/splash/unbound_boot.png";
 
 // A mix is a letter per toggle that is on: S boot screen, P NAM Pedal, M meter and Focus View, N real-gear names.
 var REFERENCE = {        // mix -> MD5 of the PC build of the same mix (build_floor2.py, same environment)
-  "": "ddd93ce3d33c1abd119ec926c78a7f31",
-  "S": "a1fa46851dbb73de3455b534c11c3c30",
-  "P": "9d3acd18197acdca580a0506864aaa35",
-  "M": "547e0c2210acd48867fc6e1e178ea131",
-  "SP": "e68dddc63b919bcd2a321415f4733090",
-  "SM": "675a40bf50de84b005183b692a9d9541",
-  "PM": "104935a7bdaf6bb1218f4ed79c0ed6ea",
-  "SPM": "1120b2ae23bf933e467abec0c6b02fed",
-  "N": "1610e13380c805002b1e9592bfce9682",
-  "SN": "952a12fd764c71456ee250ef56fadc49",
-  "PN": "6c300a81c88d8c1f8a6dcc7b7ceed4d2",
-  "MN": "00366a3258c4eb5829f86b715c7e0ade",
-  "SPN": "9632bc2ea68a5d00112a51334d8e5660",
-  "SMN": "d9f1630d03cf272ddc96c3fdba623de5",
-  "PMN": "aeb75cdde3242482fb322656d55e3c19",
-  "SPMN": "ef4ed54bf2bbb39896e28030aaf4465a",
+  "": "485562bed55327abbb697af22eb8c260",
+  "S": "4011ad511d8da46f9047e8f3bbbbc44a",
+  "P": "e4dd31dd33781c18cc2c67a3caa5bbf7",
+  "M": "7e89b2d9eda4ff620dd6184c8bfdf849",
+  "SP": "82426e1e8e15671b4c819fcb24ddcb84",
+  "SM": "d2347cfa01e14ec1f0438a5b6be7b5f1",
+  "PM": "314ba55d4651b007a11824edaf98dcf1",
+  "SPM": "43dff38d5041fc2a4daec3516525ef06",
+  "N": "920cf78c95391c174611126b8405a4c4",
+  "SN": "8e38a759786b3042bad149834e5fd623",
+  "PN": "6dd1d57da9bb260bcd4c9e9531177ca6",
+  "MN": "5c91e12ce2c4b3b267f65ffca079cdf3",
+  "SPN": "0c684cc51a6547bfbae1faf160cd2c36",
+  "SMN": "f3b02a574cc003cb2173fc59874e0c77",
+  "PMN": "042ab5a8e8a81bef79622f12f0f0a619",
+  "SPMN": "807b4dbbecffb794eef10732361f4951",
 };
 var TESTED = {};         // mix -> MD5 of the build that was run on a Helix Floor (none of these mixes yet)
 
-// Every build: the faster two-NAM kernel layout, the editor's screen mirror, the stopped-clock fix.
-// (The stock-model DSP rewrites, stage_dsp_opt.py, are NOT built: they froze a Floor on two poly pitch models. See DSP_OPT.md.)
+// Every build: the faster two-NAM kernel layout, the DSP rewrites, the editor's screen mirror, the stopped-clock fix.
 var BASE_ENV = {
   NAM_KERNEL: "nam_floor5", NAM_MAX_BLOCKS: "16", NAM_DIAG: "1",      // NAM_DIAG: no simulator check
   NAM_PAIR: "1", NAM_NOSENT: "1", NAM_LB_B0: "2", NAM_DSP_COST: "3250", NAM_PR1: "0",
@@ -70,6 +69,9 @@ var SOURCES = [
   "helix-floor/floor/stage_model.py",
   "helix-floor/floor/stage_kernel.py",
   "helix-floor/floor/stage_main.py",
+  "helix-floor/floor/stage_dsp_opt.py",
+  "helix-floor/floor/dsp_opt_port.py",
+  "helix-floor/floor/dsp_opt_floor.json",
   "helix-floor/floor/stage_splash.py",
   "helix-floor/floor/build_floor.py",
   "helix-floor/floor/build_staged.py",
@@ -149,7 +151,7 @@ async function boot() {
 function mixOf(o) { return (o.splash ? "S" : "") + (o.pedal ? "P" : "") + (o.meter ? "M" : "") + (o.names ? "N" : ""); }
 
 async function build(stock, options) {
-  var mix = mixOf(options), total = 7 + (options.splash ? 1 : 0), n = 0;
+  var mix = mixOf(options), total = 8 + (options.splash ? 1 : 0), n = 0;
   function step(text) { post({ type: "progress", step: ++n, of: total, text: text }); }
   step("Loading Python and the build tools (first time: about a minute)");
   if (!py) await boot();
@@ -184,6 +186,7 @@ async function build(stock, options) {
   stage("Patching the main program", function (a, b) { return [F + "stage_main.py", a, b]; });
   var v = run(py.toPy(["tools/l6ia_verify.py", cur]));
   if (v.indexOf("ALL OK") < 0) throw new Error("The firmware check failed:\n" + v);
+  stage("Adding the faster DSP code", function (a, b) { return [F + "stage_dsp_opt.py", a, b, F + "dsp_opt_floor.json"]; });
   if (options.splash) stage("Adding the boot screen", function (a, b) { return [F + "stage_splash.py", a, b, SPLASH]; });
   step("Packing the firmware file (checks every partition's size)");
   post({ type: "log", text: run(py.toPy([F + "floor_hxf.py", "pack", cur, "/work/out.hxf", "--donor", "/work/stock.hxf"])) });

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""The listed DSP groups are the proven ones, whole pairs only, and no two write the same parcels (no firmware needed)."""
+"""The listed DSP groups are the ones that held up on a unit, whole pairs only, and no two write the same parcels (no firmware needed)."""
 import json
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 port = json.load(open(os.path.join(HERE, "dsp_opt_floor.json"), encoding="utf-8"))
 names = [g["name"] for g in port["groups"]]
-assert len(names) == len(set(names)) == 32, len(names)
+assert len(names) == len(set(names)) == 26, len(names)
 assert not set(names) & {"ring_read", "smallk_2719", "smallk_271a"}, "a group known to be broken on the Floor is listed"
+assert not [g["name"] for g in port["groups"] if g["engine"] == "pitch"], "the poly pitch groups can freeze the Floor"
 for pair in port["together"]:
     assert all(n in names for n in pair), pair
 ranges = sorted((g["first"], g["end"], g["name"]) for g in port["groups"])

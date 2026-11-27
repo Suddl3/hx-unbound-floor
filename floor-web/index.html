@@ -77,7 +77,7 @@ pre { background: var(--code); padding: 10px; border-radius: 6px; overflow-x: au
   <section id="s1">
     <h2>Build firmware</h2>
     <p class="sub">You need a <b>Helix Floor</b> (not LT, Rack, Stomp or Stadium) and Line 6's file <code>Helix_Floor_v3.80.0_0x7d01f5efb.hxf</code>, unchanged. Use Chrome or Edge on a computer.</p>
-    <p>Always included: two NAM A2 Lite blocks per path, HX Edit Unbound support and a fix for a stopped MIDI clock.</p>
+    <p>Always included: two NAM A2 Lite blocks per path, faster DSP code for stock amps and drives (about 15% less DSP per amp measured on one Floor; poly pitch models are not changed; the block limit is unchanged), HX Edit Unbound support and a fix for a stopped MIDI clock.</p>
     <div class="opts noprint">
       <label><input type="checkbox" data-opt="splash" checked><div><b>Boot screen</b><span>HX Floor Unbound picture while it starts.</span></div></label>
       <label><input type="checkbox" data-opt="pedal" checked><div><b>NAM Pedal block</b><span>A second, much lighter NAM block for pedal captures.</span></div></label>
@@ -99,7 +99,7 @@ pre { background: var(--code); padding: 10px; border-radius: 6px; overflow-x: au
         <li>The Floor restarts, possibly on a factory setlist: switch back to your own.</li>
       </ol>
     </details>
-    <p class="muted">Please don't share the built file: it is Line 6's firmware with changes.</p>
+    <p class="muted">Please don't share the built file: it is Line 6's firmware with changes. The DSP rewrites are <a href="https://github.com/nocaseguy/hx-stomp-nam-lite/tree/dsp-opt-patch-list">nocaseguy's work</a> (GPL-3.0).</p>
   </section>
 
   <section id="s2">
