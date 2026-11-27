@@ -4,7 +4,8 @@
 //
 // In:  { stock: ArrayBuffer, options: { splash, pedal, meter, names } }
 // Out: { type: "progress", step, of, text } | { type: "log", text }
-//      { type: "done", file, bytes: ArrayBuffer, md5, mix, reference, tested } | { type: "error", text }
+//      { type: "done", file, bytes: ArrayBuffer, md5, mix, reference, tested, live } | { type: "error", text }
+//      live: the developer file (<file>.live.json, as build_floor2.py writes it) for helix-floor/floor/auto's live tools, or null
 //      reference: "match" | "differs" | "none" (no PC build recorded for this mix); tested: the mix has run on a Floor
 "use strict";
 
@@ -184,6 +185,8 @@ async function build(stock, options) {
   stage("Adding the NAM model", function (a, b) { return [F + "stage_model.py", a, b]; });
   stage("Assembling the NAM kernel", function (a, b) { return [F + "stage_kernel.py", a, b]; });
   stage("Patching the main program", function (a, b) { return [F + "stage_main.py", a, b]; });
+  var live = null;                                   // the live tools' addresses for this image (stage_main writes it)
+  try { live = JSON.parse(py.FS.readFile(cur + ".live.json", { encoding: "utf8" })); py.FS.unlink(cur + ".live.json"); } catch (e) { }
   var v = run(py.toPy(["tools/l6ia_verify.py", cur]));
   if (v.indexOf("ALL OK") < 0) throw new Error("The firmware check failed:\n" + v);
   stage("Adding the faster DSP code", function (a, b) { return [F + "stage_dsp_opt.py", a, b, F + "dsp_opt_floor.json"]; });
@@ -191,11 +194,13 @@ async function build(stock, options) {
   step("Packing the firmware file (checks every partition's size)");
   post({ type: "log", text: run(py.toPy([F + "floor_hxf.py", "pack", cur, "/work/out.hxf", "--donor", "/work/stock.hxf"])) });
   var out = md5("/work/out.hxf");
+  if (live) live.hxf_md5 = out;                      // as build_floor2.py writes <out.hxf>.live.json
   var bytes = py.FS.readFile("/work/out.hxf");
   ["/work/out.hxf", cur, "/work/stock.hxf"].forEach(function (p) { try { py.FS.unlink(p); } catch (e) { } });
   var buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   var ref = REFERENCE[mix];
   post({ type: "done", file: "Helix_Floor_v3.80.0_UNBOUND" + (mix ? "_" + mix : "") + ".hxf", bytes: buf, md5: out, mix: mix,
+         live: live ? JSON.stringify(live, null, 1) : null,
          reference: !ref ? "none" : ref === out ? "match" : "differs", tested: TESTED[mix] === out }, [buf]);
 }
 
