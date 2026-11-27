@@ -78,3 +78,11 @@ def test_hidden_rows_stay_hidden():
 def test_dma_abort_fix_stays_on():
     """NAM_PR1=0 builds the kernel without PR #1 (wait for DMA to be idle before clearing an aborted transfer)."""
     assert "NAM_PR1" not in WORKER
+
+
+def test_tested_builds_are_current_references():
+    """A "has run on a Floor" label must not outlive the build it was earned by."""
+    tables = {name: dict(re.findall(r'"([SPMN]*)": "([0-9a-f]{32})"', WORKER.split(f"var {name}")[1].split("};")[0]))
+              for name in ("REFERENCE", "TESTED")}
+    assert tables["TESTED"]
+    assert all(tables["REFERENCE"][mix] == md5 for mix, md5 in tables["TESTED"].items()), tables["TESTED"]
