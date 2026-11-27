@@ -76,6 +76,10 @@ def main():
         bf.run(os.path.join(HERE, "stage_art.py"), s4, s4 + ".art", art, os.environ.get("NAM_ART_SIZE", "128"))
         os.replace(s4 + ".art", s4)
         os.replace(s4 + ".art.art.json", out + ".art.json")
+    splash = os.environ.get("NAM_SPLASH")    # a PNG, 800 x 350: our picture on the boot screen (stage_splash.py)
+    if splash:
+        bf.run(os.path.join(HERE, "stage_splash.py"), s4, s4 + ".splash", splash)
+        os.replace(s4 + ".splash", s4)
     # (the partition guard runs inside floor_hxf.pack below and prints its table into this log)
     rep = bf.report(s0, s4)
     print(rep)
