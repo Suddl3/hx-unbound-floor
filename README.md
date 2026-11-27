@@ -2,6 +2,8 @@
 
 Custom firmware for the **Line 6 Helix Floor (3.80.0)**, built by patching your own copy of Line 6's stock firmware file on your own computer. Part of the [HX Unbound](https://github.com/Suddl3/hx-unbound) community.
 
+**[Open the firmware builder](https://suddl3.github.io/hx-unbound-floor/floor-web/)** (Chrome or Edge, on a computer).
+
 > **Unofficial and experimental.** Not affiliated with, endorsed by or supported by Line 6 or Yamaha Guitar Group. Installing modified firmware is at your own risk and may void your warranty. No firmware is distributed here, and a built file must never be shared. Rehearse the [recovery](helix-floor/README.md#install-and-recovery) before you install anything.
 
 ## Firmware and editor
@@ -45,9 +47,9 @@ This is a standalone repository with imported history, not a GitHub fork, so Git
 
 ## Build
 
-**In the browser:** [floor-web/](floor-web/index.html) builds the firmware from your own stock file, with toggles for the boot
-screen, NAM Pedal, DSP meter and Focus View, and real-gear names, and converts `.nam` captures. It is published by the
-manual `pages` workflow once GitHub Pages is switched on.
+**In the browser:** the [firmware builder](https://suddl3.github.io/hx-unbound-floor/floor-web/) builds the firmware from your own
+stock file, with toggles for the boot screen, NAM Pedal, DSP meter and Focus View, and real-gear names, and converts
+`.nam` captures. Its source is [floor-web/](floor-web/index.html), published by the manual `pages` workflow.
 
 **On a PC:** you need Python 3.10+, `capstone`, and your own Line 6 stock `Helix_Floor_v3.80.0_0x7d01f5efb.hxf` (MD5 `805caa03e8a30fd6ff7892f32ed5a9f4`):
 
