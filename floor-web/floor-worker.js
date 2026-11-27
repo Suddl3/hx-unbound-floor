@@ -16,29 +16,29 @@ var SPLASH = "helix-floor/floor/splash/unbound_boot.png";
 
 // A mix is a letter per toggle that is on: S boot screen, P NAM Pedal, M meter and Focus View, N real-gear names.
 var REFERENCE = {        // mix -> MD5 of the PC build of the same mix (build_floor2.py, same environment)
-  "": "485562bed55327abbb697af22eb8c260",
-  "S": "4011ad511d8da46f9047e8f3bbbbc44a",
-  "P": "e4dd31dd33781c18cc2c67a3caa5bbf7",
-  "M": "7e89b2d9eda4ff620dd6184c8bfdf849",
-  "SP": "82426e1e8e15671b4c819fcb24ddcb84",
-  "SM": "d2347cfa01e14ec1f0438a5b6be7b5f1",
-  "PM": "314ba55d4651b007a11824edaf98dcf1",
-  "SPM": "43dff38d5041fc2a4daec3516525ef06",
-  "N": "920cf78c95391c174611126b8405a4c4",
-  "SN": "8e38a759786b3042bad149834e5fd623",
-  "PN": "6dd1d57da9bb260bcd4c9e9531177ca6",
-  "MN": "5c91e12ce2c4b3b267f65ffca079cdf3",
-  "SPN": "0c684cc51a6547bfbae1faf160cd2c36",
-  "SMN": "f3b02a574cc003cb2173fc59874e0c77",
-  "PMN": "042ab5a8e8a81bef79622f12f0f0a619",
-  "SPMN": "807b4dbbecffb794eef10732361f4951",
+  "": "bdcdd0a4102283bedfce12d15c597426",
+  "S": "63d72d4cbde76457e6551b3e3db0be97",
+  "P": "7053caec3d2cd6265f585eed03351440",
+  "M": "9cf1125500fe9e8608ffef4d12a3b0dc",
+  "SP": "2e5b8e950a6c2473c6327cbda0f44a0d",
+  "SM": "40309a2009ef2e3aa6fb5a571b48905b",
+  "PM": "84d73c6dbd6f789865b13daf475cd251",
+  "SPM": "60f4ab7a9e814ce66565797effcbe0e2",
+  "N": "ce258672b0bdfcb6669496aa5e08a0ef",
+  "SN": "397376c8433e946648c99f24d5f51b42",
+  "PN": "934cea189a107c8aee83eaa45c52a690",
+  "MN": "e87637868c354a41f2c7562d64a21bee",
+  "SPN": "f7844e4f9a39108831d72c1b21b8b328",
+  "SMN": "5479ee8674d3f89152aad3fa1d96c278",
+  "PMN": "940cb59b5736c9faaafbfb21eb06644c",
+  "SPMN": "d7d321b2db63f2c17323445236892212",
 };
 var TESTED = {};         // mix -> MD5 of the build that was run on a Helix Floor (none of these mixes yet)
 
 // Every build: the faster two-NAM kernel layout, the DSP rewrites, the editor's screen mirror, the stopped-clock fix.
 var BASE_ENV = {
   NAM_KERNEL: "nam_floor5", NAM_MAX_BLOCKS: "16", NAM_DIAG: "1",      // NAM_DIAG: no simulator check
-  NAM_PAIR: "1", NAM_NOSENT: "1", NAM_LB_B0: "2", NAM_DSP_COST: "3250", NAM_PR1: "0",
+  NAM_PAIR: "1", NAM_NOSENT: "1", NAM_LB_B0: "2", NAM_DSP_COST: "3250",
   NAM_SCREEN_MIRROR: "1", NAM_CLK_STOP: "1",
 };
 var TOGGLE_ENV = {
